@@ -52,6 +52,7 @@ export const javaProvider: RuntimeProvider = {
   lang: 'java',
   label: 'Java (本机 JDK)',
   priority: 10,
+  interrupt: 'protocol',
 
   async detect(host) {
     if (!host.canSpawn) return null;
@@ -106,6 +107,7 @@ export const pythonProvider: RuntimeProvider = {
   lang: 'python',
   label: 'Python (本机)',
   priority: 10,
+  interrupt: 'signal',
 
   async detect(host) {
     if (!host.canSpawn) return null;
@@ -148,6 +150,7 @@ export const nodeProvider: RuntimeProvider = {
   lang: 'js',
   label: 'JavaScript (本机 Node)',
   priority: 10,
+  interrupt: 'signal',
 
   async detect(host) {
     if (!host.canSpawn) return null;

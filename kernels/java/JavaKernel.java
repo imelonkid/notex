@@ -19,6 +19,10 @@ public class JavaKernel {
     SourceCodeAnalysis analysis;
     /** 用户代码的 stdout/stderr 通过这里回流，标记当前请求 id */
     volatile String currentId = "";
+    /** 用户请求中断后置位；JShell 的 stop() 不会留下可识别的事件，靠这个标记区分 */
+    volatile boolean stopRequested = false;
+    /** 调用注入的渲染器时置位，避免对渲染结果本身再次渲染 */
+    volatile boolean rendering = false;
     final ExecutorService worker = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "xnb-exec");
         t.setDaemon(true);
@@ -36,6 +40,11 @@ public class JavaKernel {
                 .in(new ByteArrayInputStream(new byte[0]))
                 .build();
         analysis = shell.sourceCodeAnalysis();
+        try {
+            shell.eval(RENDERER_SOURCE);
+        } catch (Exception ignored) {
+            // 渲染器注入失败只影响富输出，纯文本结果照常工作
+        }
 
         Map<String, Object> ready = new LinkedHashMap<>();
         ready.put("id", "boot");
@@ -55,7 +64,10 @@ public class JavaKernel {
                 case "execute" -> submitExecute(id, str(req.get("code")));
                 case "complete" -> complete(id, str(req.get("code")), intOf(req.get("cursor")));
                 case "inspect" -> inspect(id, str(req.get("code")), intOf(req.get("cursor")));
-                case "interrupt" -> { try { shell.stop(); } catch (Exception ignored) {} }
+                case "interrupt" -> {
+                    stopRequested = true;
+                    try { shell.stop(); } catch (Exception ignored) {}
+                }
                 case "shutdown" -> { shutdown(); return; }
                 default -> done(id, "error", 0);
             }
@@ -68,11 +80,141 @@ public class JavaKernel {
         try { shell.close(); } catch (Exception ignored) {}
     }
 
+    /**
+     * 注入到用户会话里的渲染器。JShell 在独立 JVM 中执行，宿主拿不到真实对象，
+     * 因此把渲染工作放进去，结果用 Base64 回传，规避 Java 字符串字面量的转义问题。
+     * 返回 "mime,payload" 的 Base64，无可渲染内容时返回 null。
+     */
+    static final String RENDERER_SOURCE = """
+        public class __XnbRender {
+            static final int MAX_ROWS = 200;
+
+            public static String render(Object o) {
+                if (o == null) return null;
+                String mime = "text/html";
+                String payload;
+                try {
+                    String png = png(o);
+                    if (png != null) { mime = "image/png"; payload = png; }
+                    else if (o instanceof java.util.Map<?, ?> m) {
+                        if (m.isEmpty()) return null;
+                        payload = mapTable(m);
+                    } else if (o instanceof java.util.Collection<?> c) {
+                        if (c.isEmpty()) return null;
+                        payload = collTable(c);
+                    } else if (o.getClass().isArray()) {
+                        java.util.List<Object> list = new java.util.ArrayList<>();
+                        int n = java.lang.reflect.Array.getLength(o);
+                        for (int i = 0; i < n && i < MAX_ROWS; i++) list.add(java.lang.reflect.Array.get(o, i));
+                        if (list.isEmpty()) return null;
+                        payload = collTable(list);
+                    } else return null;
+                } catch (Throwable t) {
+                    return null;
+                }
+                byte[] raw = (mime + "," + payload).getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                return java.util.Base64.getEncoder().encodeToString(raw);
+            }
+
+            /** 用反射处理图像，避免硬依赖 java.desktop 模块 */
+            static String png(Object o) {
+                try {
+                    Class<?> img = Class.forName("java.awt.image.RenderedImage");
+                    if (!img.isInstance(o)) return null;
+                    Class<?> io = Class.forName("javax.imageio.ImageIO");
+                    java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
+                    java.lang.reflect.Method w = io.getMethod("write", img, String.class, java.io.OutputStream.class);
+                    Object ok = w.invoke(null, o, "png", bos);
+                    if (!(ok instanceof Boolean b) || !b) return null;
+                    return java.util.Base64.getEncoder().encodeToString(bos.toByteArray());
+                } catch (Throwable t) {
+                    return null;
+                }
+            }
+
+            static String esc(Object v) {
+                String s = String.valueOf(v);
+                if (s.length() > 400) s = s.substring(0, 400) + "…";
+                return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+            }
+
+            static String mapTable(java.util.Map<?, ?> m) {
+                StringBuilder sb = new StringBuilder("<table><thead><tr><th>键</th><th>值</th></tr></thead><tbody>");
+                int i = 0;
+                for (java.util.Map.Entry<?, ?> e : m.entrySet()) {
+                    if (i++ >= MAX_ROWS) break;
+                    sb.append("<tr><td>").append(esc(e.getKey())).append("</td><td>")
+                      .append(esc(e.getValue())).append("</td></tr>");
+                }
+                sb.append("</tbody></table>");
+                if (m.size() > MAX_ROWS) sb.append("<div>共 ").append(m.size()).append(" 项，仅显示前 ").append(MAX_ROWS).append(" 项</div>");
+                return sb.toString();
+            }
+
+            static String collTable(java.util.Collection<?> c) {
+                // 元素若都是 Map，按并集的键做多列表格；否则单列加序号
+                java.util.List<Object> rows = new java.util.ArrayList<>();
+                for (Object o : c) { rows.add(o); if (rows.size() >= MAX_ROWS) break; }
+                boolean allMaps = !rows.isEmpty();
+                for (Object o : rows) if (!(o instanceof java.util.Map)) { allMaps = false; break; }
+
+                StringBuilder sb = new StringBuilder("<table><thead><tr>");
+                if (allMaps) {
+                    java.util.LinkedHashSet<Object> cols = new java.util.LinkedHashSet<>();
+                    for (Object o : rows) cols.addAll(((java.util.Map<?, ?>) o).keySet());
+                    for (Object col : cols) sb.append("<th>").append(esc(col)).append("</th>");
+                    sb.append("</tr></thead><tbody>");
+                    for (Object o : rows) {
+                        sb.append("<tr>");
+                        java.util.Map<?, ?> row = (java.util.Map<?, ?>) o;
+                        for (Object col : cols) sb.append("<td>").append(esc(row.get(col))).append("</td>");
+                        sb.append("</tr>");
+                    }
+                } else {
+                    sb.append("<th>#</th><th>值</th></tr></thead><tbody>");
+                    for (int i = 0; i < rows.size(); i++) {
+                        sb.append("<tr><td>").append(i).append("</td><td>")
+                          .append(esc(rows.get(i))).append("</td></tr>");
+                    }
+                }
+                sb.append("</tbody></table>");
+                if (c.size() > MAX_ROWS) sb.append("<div>共 ").append(c.size()).append(" 项，仅显示前 ").append(MAX_ROWS).append(" 项</div>");
+                return sb.toString();
+            }
+        }
+        """;
+
+    /** 对表达式结果调用注入的渲染器，拿回 mime 与数据；无富输出时返回 null */
+    String[] richOutput(String varName) {
+        if (varName == null || varName.isBlank() || rendering) return null;
+        rendering = true;
+        try {
+            List<SnippetEvent> events = shell.eval("__XnbRender.render(" + varName + ")");
+            for (SnippetEvent ev : events) {
+                if (ev.exception() != null || ev.value() == null) continue;
+                String literal = ev.value();
+                if (literal.equals("null") || literal.length() < 2) continue;
+                // 值是 Java 字符串字面量，Base64 内容只含 ASCII，去掉首尾引号即可
+                String b64 = literal.substring(1, literal.length() - 1);
+                String decoded = new String(Base64.getDecoder().decode(b64), StandardCharsets.UTF_8);
+                int sep = decoded.indexOf(',');
+                if (sep < 0) continue;
+                return new String[] { decoded.substring(0, sep), decoded.substring(sep + 1) };
+            }
+        } catch (Throwable ignored) {
+            // 渲染失败不能影响正常结果
+        } finally {
+            rendering = false;
+        }
+        return null;
+    }
+
     /** 执行放到单线程池，读 stdin 的主线程保持可响应 interrupt */
     void submitExecute(String id, String code) {
         worker.submit(() -> {
             long t0 = System.nanoTime();
             currentId = id;
+            stopRequested = false;
             String status = "ok";
             try {
                 status = execute(id, code);
@@ -89,6 +231,7 @@ public class JavaKernel {
     String execute(String id, String code) {
         String remaining = code;
         String lastValue = null;
+        String lastName = null;
         while (remaining != null && !remaining.isBlank()) {
             CompletionInfo info = analysis.analyzeCompletion(remaining);
             String snippet = info.source();
@@ -106,6 +249,11 @@ public class JavaKernel {
             } catch (IllegalStateException e) {
                 error(id, "KernelError", "内核已关闭", List.of());
                 return "error";
+            }
+
+            if (stopRequested) {
+                error(id, "KeyboardInterrupt", "执行被中断", List.of());
+                return "aborted";
             }
 
             for (SnippetEvent ev : events) {
@@ -143,11 +291,18 @@ public class JavaKernel {
                     return "error";
                 }
                 String v = ev.value();
-                if (v != null && !v.isEmpty()) lastValue = v;
+                if (v != null && !v.isEmpty()) {
+                    lastValue = v;
+                    lastName = ev.snippet() instanceof ExpressionSnippet es ? es.name()
+                             : ev.snippet() instanceof VarSnippet vs ? vs.name()
+                             : null;
+                }
             }
         }
         if (lastValue != null) {
             Map<String, Object> data = new LinkedHashMap<>();
+            String[] rich = richOutput(lastName);
+            if (rich != null) data.put(rich[0], rich[1]);
             data.put("text/plain", lastValue);
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("id", id);

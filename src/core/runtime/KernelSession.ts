@@ -25,6 +25,7 @@ export class KernelSession {
     private conn: KernelConnection,
     readonly providerId: string,
     readonly version: string,
+    private interruptStrategy: 'protocol' | 'signal' = 'protocol',
   ) {
     conn.onMessage((msg) => this.dispatch(msg));
     conn.onRawOutput((text) => this.rawCbs.forEach((cb) => cb(text)));
@@ -125,8 +126,15 @@ export class KernelSession {
     return text;
   }
 
-  /** 先发协议 interrupt，1 秒无效再升级到信号 */
+  /**
+   * 中断。信号型内核执行时读不到 stdin，直接发信号；
+   * 协议型先发消息，1 秒仍未收敛再升级到信号。
+   */
   async interrupt(): Promise<void> {
+    if (this.interruptStrategy === 'signal') {
+      await this.conn.interrupt();
+      return;
+    }
     const target = [...this.pending.keys()][0] ?? '';
     try {
       await this.conn.send(encodeRequest({ id: nextId(), op: 'interrupt', target }));

@@ -109,19 +109,22 @@ async function execute(id, code) {
     } catch {
       script = new vm.Script(code, { filename: 'cell.js' });
     }
-    const value = await script.runInContext(context);
+    // breakOnSigint 让同步死循环也能被 SIGINT 打断，
+    // 否则事件循环被占死，连 stdin 都读不到。
+    const value = await script.runInContext(context, { breakOnSigint: true });
     if (value !== undefined) {
       emit({ id, type: 'result', data: resultBundle(value) });
     }
   } catch (err) {
+    const interrupted = /interrupted by SIGINT|was interrupted/i.test(String(err?.message ?? ''));
     emit({
       id,
       type: 'error',
-      ename: err?.name ?? 'Error',
-      evalue: err?.message ?? String(err),
-      traceback: cleanStack(err),
+      ename: interrupted ? 'KeyboardInterrupt' : (err?.name ?? 'Error'),
+      evalue: interrupted ? '执行被中断' : (err?.message ?? String(err)),
+      traceback: interrupted ? [] : cleanStack(err),
     });
-    status = 'error';
+    status = interrupted ? 'aborted' : 'error';
   } finally {
     outSink.flush();
     errSink.flush();
@@ -202,6 +205,9 @@ function inspectOp(id, code, cursor) {
   emit({ id, type: 'inspection', text });
   emit({ id, type: 'done', status: 'ok', durationMs: 0 });
 }
+
+// 空闲时收到 SIGINT 不要退出；执行期间 breakOnSigint 会接管这个信号
+process.on('SIGINT', () => {});
 
 emit({ id: 'boot', type: 'ready', lang: 'js', version: process.versions.node });
 

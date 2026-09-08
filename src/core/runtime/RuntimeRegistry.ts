@@ -142,7 +142,12 @@ export class RuntimeRegistry {
       this.patch(lang, { status: 'starting', error: undefined });
       try {
         const conn = await state.provider.launch(this.host, state.info);
-        const session = new KernelSession(conn, state.provider.id, state.info.version);
+        const session = new KernelSession(
+          conn,
+          state.provider.id,
+          state.info.version,
+          state.provider.interrupt,
+        );
         session.onExit(() => {
           const s = this.get(lang);
           if (s.session === session) {

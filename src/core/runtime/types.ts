@@ -41,11 +41,18 @@ export interface KernelConnection {
   dispose(): Promise<void>;
 }
 
+/**
+ * 中断方式。protocol 表示内核能在执行期间读到 interrupt 消息（Java 的 JShell.stop）；
+ * signal 表示执行会占死主线程，只能靠 SIGINT（Python 的 KeyboardInterrupt、Node 的 breakOnSigint）。
+ */
+export type InterruptStrategy = 'protocol' | 'signal';
+
 export interface RuntimeProvider {
   id: string;
   lang: LangId;
   label: string;
   priority: number;
+  interrupt: InterruptStrategy;
   /** 探测本地环境。返回 null 表示不可用。 */
   detect(host: HostBridge): Promise<RuntimeInfo | null>;
   launch(host: HostBridge, info: RuntimeInfo): Promise<KernelConnection>;

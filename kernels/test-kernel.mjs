@@ -111,6 +111,8 @@ const CASES = {
     compileErr: 'int broken = "not a number";',
     completeSetup: 'import java.util.*;\nvar words = List.of("a", "b");',
     completeCode: 'words.st',
+    spin: 'long n = 0; while (true) { n++; }',
+    interrupt: 'protocol',
   },
   python: {
     hello: 'print("你好, xnotebook")\n6 * 7',
@@ -120,6 +122,8 @@ const CASES = {
     compileErr: 'def broken(:',
     completeSetup: 'import os',
     completeCode: 'os.pa',
+    spin: 'n = 0\nwhile True:\n    n += 1',
+    interrupt: 'signal',
   },
   js: {
     hello: 'console.log("你好, xnotebook");\n6 * 7',
@@ -129,6 +133,8 @@ const CASES = {
     compileErr: 'function broken( {',
     completeSetup: 'const greeting = "hi";',
     completeCode: 'JSON.pa',
+    spin: 'let n = 0; for (;;) { n++; }',
+    interrupt: 'signal',
   },
 };
 
@@ -180,9 +186,41 @@ async function main() {
     check('const 声明跨 cell 可见', msgs.some((m) => m.type === 'result' && m.data['text/plain'].includes('HI')));
   }
 
-  console.log('\n6. 错误后内核仍然可用');
+  console.log('\n6. 中断长时间运行的 cell');
+  {
+    const id = 'spin1';
+    const spinMsgs = [];
+    const spinDone = new Promise((resolve) => {
+      waiters.set(id, { messages: spinMsgs, resolve });
+    });
+    proc.stdin.write(RS + JSON.stringify({ id, op: 'execute', code: t.spin }) + '\n');
+    await new Promise((r) => setTimeout(r, 1200));
+
+    const t0 = Date.now();
+    if (t.interrupt === 'protocol') {
+      proc.stdin.write(RS + JSON.stringify({ id: 'int1', op: 'interrupt', target: id }) + '\n');
+    } else {
+      proc.kill('SIGINT');
+    }
+
+    const finished = await Promise.race([
+      spinDone.then(() => true),
+      new Promise((r) => setTimeout(() => r(false), 8000)),
+    ]);
+    waiters.delete(id);
+    summarize(spinMsgs).forEach((l) => console.log('   ', l));
+    check('死循环被中断', finished, '8 秒内没有收到 done，内核可能已卡死');
+    if (finished) console.log(`      中断耗时 ${Date.now() - t0}ms`);
+  }
+
+  console.log('\n7. 中断后内核仍然可用');
   msgs = await request('execute', { code: t.stateB });
   check('仍能执行并保有状态', msgs.some((m) => m.type === 'result' && m.data['text/plain'].includes('55')));
+
+  console.log('\n8. 错误后内核仍然可用');
+  await request('execute', { code: t.boom }).catch(() => []);
+  msgs = await request('execute', { code: t.stateB });
+  check('报错后仍能执行', msgs.some((m) => m.type === 'result' && m.data['text/plain'].includes('55')));
 
   console.log(`\n${failures === 0 ? '全部通过' : failures + ' 项失败'}\n`);
   proc.stdin.write(RS + JSON.stringify({ id: 'bye', op: 'shutdown' }) + '\n');
