@@ -1,0 +1,52 @@
+/**
+ * 宿主能力抽象。UI 与 Core 只依赖这个接口，
+ * 由 BrowserHost / DevServerHost / (将来) TauriHost 实现。
+ */
+
+export class HostCapabilityError extends Error {
+  constructor(capability: string) {
+    super(`当前宿主不支持：${capability}`);
+    this.name = 'HostCapabilityError';
+  }
+}
+
+export interface SpawnOptions {
+  cwd?: string;
+  env?: Record<string, string>;
+}
+
+export interface ChildProcess {
+  pid: number;
+  write(data: string): Promise<void>;
+  onStdout(cb: (chunk: string) => void): () => void;
+  onStderr(cb: (chunk: string) => void): () => void;
+  onExit(cb: (code: number | null) => void): () => void;
+  kill(signal?: 'SIGINT' | 'SIGTERM' | 'SIGKILL'): Promise<void>;
+}
+
+export interface ExecResult {
+  code: number;
+  stdout: string;
+  stderr: string;
+}
+
+export type Platform = 'darwin' | 'win32' | 'linux';
+
+export interface HostBridge {
+  readonly id: string;
+  /** 能否 spawn 本地进程。false 时只有浏览器内 provider 可用。 */
+  readonly canSpawn: boolean;
+
+  platform(): Platform;
+  spawn(cmd: string, args: string[], opts?: SpawnOptions): Promise<ChildProcess>;
+  /** 一次性执行并收集输出，用于版本探测 */
+  exec(cmd: string, args: string[], opts?: SpawnOptions): Promise<ExecResult>;
+  which(bin: string): Promise<string | null>;
+  env(name: string): Promise<string | undefined>;
+  /** 内核脚本在宿主上的绝对路径 */
+  kernelPath(relative: string): Promise<string>;
+
+  readText(path: string): Promise<string>;
+  writeText(path: string, content: string): Promise<void>;
+  fileExists(path: string): Promise<boolean>;
+}

@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<style>
+html, body { margin: 0; height: 100%; }
+body { background: #fdfdfc; }
+a { color: #3f5a7d; }
+a:hover { color: #1c1c1a; }
+textarea { font: inherit; }
+::selection { background: #e8e8e2; }
+.hljs { background: transparent !important; }
+.nb-md { line-height: 1.72; font-size: 16px; color: #1c1c1a; }
+.nb-md > :first-child { margin-top: 0; }
+.nb-md > :last-child { margin-bottom: 0; }
+.nb-md h1, .nb-md h2, .nb-md h3, .nb-md h4 { font-family: 'Newsreader', Georgia, serif; font-weight: 500; line-height: 1.25; margin: 1em 0 0.45em; letter-spacing: 0.005em; }
+.nb-md h1 { font-size: 30px; } .nb-md h2 { font-size: 23px; } .nb-md h3 { font-size: 18.5px; }
+.nb-md p { margin: 0.55em 0; }
+.nb-md ul, .nb-md ol { margin: 0.55em 0; padding-left: 1.4em; }
+.nb-md li { margin: 0.25em 0; }
+.nb-md code { background: #f2f2ee; border-radius: 3px; padding: 1px 5px; font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 0.85em; }
+.nb-md pre { background: #f7f7f4; border: 1px solid #e6e6e1; color: #1c1c1a; border-radius: 4px; padding: 13px 15px; overflow: auto; }
+.nb-md pre code { background: none; padding: 0; color: inherit; }
+.nb-md blockquote { margin: 0.7em 0; padding: 2px 16px; border-left: 2px solid #d8d8d2; color: #55554f; }
+.nb-md img { max-width: 100%; border-radius: 4px; }
+.nb-md table { border-collapse: collapse; }
+.nb-md th, .nb-md td { border-bottom: 1px solid #e6e6e1; padding: 6px 12px; text-align: left; }
+.nb-md th { font-weight: 600; }
+.nb-md hr { border: none; border-top: 1px solid #e6e6e1; }
+</style>
+</helmet>
+<div style="display:flex; height:100vh; background:#fdfdfc; color:#1c1c1a; font-family:'Helvetica Neue', Helvetica, Arial, sans-serif; overflow:hidden">
+  <sc-if value="{{ showSidebar }}" hint-placeholder-val="{{ true }}">
+    <aside style="width:230px; flex:none; background:#fdfdfc; display:flex; flex-direction:column; gap:2px; padding:22px 14px 16px; border-right:1px solid #e6e6e1; box-sizing:border-box">
+      <div style="display:flex; align-items:baseline; gap:8px; padding:0 10px 20px">
+        <div style="font-family:'Newsreader', Georgia, serif; font-size:21px; font-weight:600">笔记本</div>
+        <div style="font-size:11px; color:#a3a39c; letter-spacing:0.06em">NOTEBOOK</div>
+      </div>
+      <div style="font-size:10.5px; font-weight:600; letter-spacing:0.1em; color:#a3a39c; padding:0 10px 6px">我的笔记</div>
+      <sc-for list="{{ notebooks }}" as="nb" hint-placeholder-count="2">
+        <div onClick="{{ nb.select }}" style="display:flex; align-items:center; gap:6px; padding:7px 6px 7px 10px; border-radius:3px; cursor:pointer; background:{{ nb.bg }}" style-hover="background:#f2f2ee">
+          <span style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13.5px; font-weight:{{ nb.weight }}">{{ nb.title }}</span>
+          <span onClick="{{ nb.remove }}" title="删除笔记" style="color:#c2c2bb; font-size:15px; line-height:1; padding:1px 6px; border-radius:3px; flex:none" style-hover="color:#9c3423; background:#f2f2ee">×</span>
+        </div>
+      </sc-for>
+      <button onClick="{{ addNotebook }}" style="margin-top:12px; border:1px solid #d8d8d2; background:transparent; color:#1c1c1a; font-family:inherit; font-weight:500; font-size:13px; padding:7px 14px; border-radius:3px; cursor:pointer" style-hover="border-color:#1c1c1a">＋ 新建笔记本</button>
+      <div style="flex:1"></div>
+      <div style="font-size:11.5px; color:#8a8a84; padding:0 10px; display:flex; align-items:center; gap:7px; border-top:1px solid #e6e6e1; margin:0 -14px; padding:12px 24px 0">
+        <span style="width:6px; height:6px; border-radius:999px; background:{{ pyDotColor }}; flex:none"></span>
+        Python 运行时：{{ pyLabel }}
+      </div>
+    </aside>
+  </sc-if>
+  <main style="flex:1; min-width:0; overflow-y:auto">
+    <div style="max-width:860px; margin:0 auto; padding:40px 44px 45vh; box-sizing:border-box">
+      <header style="display:flex; flex-direction:column; gap:10px; margin-bottom:14px">
+        <input value="{{ title }}" onChange="{{ rename }}" title="笔记标题" style="font-family:'Newsreader', Georgia, serif; font-weight:500; font-size:34px; color:#1c1c1a; background:transparent; border:none; outline:none; padding:0; width:100%; min-width:0" />
+        <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; padding-bottom:16px; border-bottom:1px solid #e6e6e1">
+          <button onClick="{{ runAll }}" style="background:#1c1c1a; color:#fdfdfc; border:1px solid #1c1c1a; font-family:inherit; font-weight:500; font-size:12.5px; padding:6px 16px; border-radius:3px; cursor:pointer" style-hover="background:#3a3a36">全部运行</button>
+          <button onClick="{{ clearOutputs }}" style="background:transparent; color:#6f6f6a; border:1px solid transparent; font-family:inherit; font-weight:500; font-size:12.5px; padding:6px 12px; border-radius:3px; cursor:pointer" style-hover="border-color:#d8d8d2; color:#1c1c1a">清空输出</button>
+          <span style="flex:1"></span>
+          <span style="font-size:12px; color:#a3a39c">Shift+Enter 运行 · 双击文本编辑 · 拖 ⠿ 排序</span>
+        </div>
+      </header>
+      <sc-for list="{{ cells }}" as="c" hint-placeholder-count="4">
+        <div onDragOver="{{ c.onDragOver }}" onDrop="{{ c.onDrop }}" style="position:relative">
+          <div style="height:2px; background:#1c1c1a; opacity:{{ c.dropOpacity }}; margin:1px 0; transition:opacity 0.12s"></div>
+          <div style="display:grid; grid-template-columns:52px minmax(0,1fr); gap:0 14px; align-items:start; padding:10px 8px 14px 0; border-radius:4px" style-hover="background:#fafaf7">
+            <div style="display:flex; flex-direction:column; align-items:flex-end; gap:8px; padding-top:8px">
+              <span draggable="{{ true }}" onDragStart="{{ c.onDragStart }}" onDragEnd="{{ c.onDragEnd }}" title="拖动排序" style="cursor:grab; color:#c2c2bb; font-size:14px; user-select:none; line-height:1">⠿</span>
+              <sc-if value="{{ c.showBadge }}" hint-placeholder-val="{{ false }}">
+                <span style="font-family:ui-monospace, Menlo, Consolas, monospace; font-size:11px; color:#8a8a84">{{ c.badge }}</span>
+              </sc-if>
+            </div>
+            <div style="min-width:0">
+              <div style="display:flex; gap:6px; align-items:center; margin-bottom:7px; flex-wrap:wrap">
+                <sc-if value="{{ c.isCode }}" hint-placeholder-val="{{ false }}">
+                  <div style="display:inline-flex; border:1px solid #d8d8d2; border-radius:3px; overflow:hidden; font-size:11px">
+                    <span onClick="{{ c.setJs }}" style="padding:3px 10px; cursor:pointer; font-weight:600; letter-spacing:0.04em; background:{{ c.jsBg }}; color:{{ c.jsColor }}">JS</span>
+                    <span onClick="{{ c.setPy }}" style="padding:3px 10px; cursor:pointer; font-weight:600; letter-spacing:0.04em; background:{{ c.pyBg }}; color:{{ c.pyColor }}; border-left:1px solid #d8d8d2">PY</span>
+                  </div>
+                  <button onClick="{{ c.run }}" style="background:transparent; color:#1c1c1a; border:1px solid #1c1c1a; font-family:inherit; font-weight:500; font-size:11.5px; padding:3px 14px; border-radius:3px; cursor:pointer" style-hover="background:#1c1c1a; color:#fdfdfc">{{ c.runLabel }}</button>
+                </sc-if>
+                <sc-if value="{{ c.isMd }}" hint-placeholder-val="{{ true }}">
+                  <span style="font-size:11px; font-weight:600; letter-spacing:0.04em; color:#8a8a84; border:1px solid #e6e6e1; padding:3px 10px; border-radius:3px">MARKDOWN</span>
+                  <sc-if value="{{ c.editing }}" hint-placeholder-val="{{ false }}">
+                    <button onClick="{{ c.doneEdit }}" style="background:#1c1c1a; color:#fdfdfc; border:1px solid #1c1c1a; font-family:inherit; font-weight:500; font-size:11.5px; padding:3px 14px; border-radius:3px; cursor:pointer" style-hover="background:#3a3a36">完成</button>
+                  </sc-if>
+                  <sc-if value="{{ c.notEditing }}" hint-placeholder-val="{{ true }}">
+                    <button onClick="{{ c.edit }}" style="background:transparent; color:#6f6f6a; border:1px solid #d8d8d2; font-family:inherit; font-weight:500; font-size:11.5px; padding:3px 14px; border-radius:3px; cursor:pointer" style-hover="border-color:#1c1c1a; color:#1c1c1a">编辑</button>
+                  </sc-if>
+                </sc-if>
+                <span style="flex:1"></span>
+                <button onClick="{{ c.addMdBelow }}" title="在下方插入文本" style="background:transparent; border:none; color:#a3a39c; font-size:11.5px; font-weight:500; padding:3px 8px; border-radius:3px; cursor:pointer; font-family:inherit" style-hover="color:#1c1c1a; background:#f2f2ee">＋文本</button>
+                <button onClick="{{ c.addCodeBelow }}" title="在下方插入代码" style="background:transparent; border:none; color:#a3a39c; font-size:11.5px; font-weight:500; padding:3px 8px; border-radius:3px; cursor:pointer; font-family:inherit" style-hover="color:#1c1c1a; background:#f2f2ee">＋代码</button>
+                <button onClick="{{ c.remove }}" title="删除此 cell" style="background:transparent; border:none; color:#c2c2bb; font-size:14px; line-height:1; padding:3px 8px; border-radius:3px; cursor:pointer" style-hover="color:#9c3423; background:#f2f2ee">×</button>
+              </div>
+              <sc-if value="{{ c.isMd }}" hint-placeholder-val="{{ true }}">
+                <sc-if value="{{ c.editing }}" hint-placeholder-val="{{ false }}">
+                  <textarea autoFocus="{{ true }}" value="{{ c.source }}" onChange="{{ c.onInput }}" onKeyDown="{{ c.onKeyDown }}" rows="{{ c.rows }}" spellCheck="{{ false }}" style="width:100%; box-sizing:border-box; background:#fdfdfc; border:1px solid #d8d8d2; border-radius:4px; padding:12px 14px; font-size:13.5px; line-height:1.6; resize:vertical; outline:none; color:#1c1c1a; font-family:ui-monospace, 'SF Mono', Menlo, Consolas, monospace" style-focus="border-color:#1c1c1a"></textarea>
+                  <div style="font-size:11px; color:#a3a39c; margin:8px 2px 4px; letter-spacing:0.03em">实时预览 · Shift+Enter 完成</div>
+                  <div class="nb-md" dangerouslySetInnerHTML="{{ c.mdHtml }}" style="padding:2px 0 2px 14px; border-left:2px solid #e6e6e1"></div>
+                </sc-if>
+                <sc-if value="{{ c.notEditing }}" hint-placeholder-val="{{ true }}">
+                  <div class="nb-md" onDoubleClick="{{ c.edit }}" dangerouslySetInnerHTML="{{ c.mdHtml }}" style="padding:2px 0; cursor:text"></div>
+                </sc-if>
+              </sc-if>
+              <sc-if value="{{ c.isCode }}" hint-placeholder-val="{{ false }}">
+                <div style="position:relative; background:#f7f7f4; border:1px solid #e6e6e1; border-radius:4px; overflow:hidden">
+                  <pre aria-hidden="true" style="margin:0; padding:13px 15px; font-family:ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size:13px; line-height:1.6; white-space:pre-wrap; word-break:break-all; min-height:21px; color:#1c1c1a"><code class="hljs" dangerouslySetInnerHTML="{{ c.hlHtml }}" style="display:block; padding:0"></code></pre>
+                  <textarea value="{{ c.source }}" onChange="{{ c.onInput }}" onKeyDown="{{ c.onKeyDown }}" spellCheck="{{ false }}" style="position:absolute; inset:0; width:100%; height:100%; box-sizing:border-box; padding:13px 15px; font-family:ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size:13px; line-height:1.6; white-space:pre-wrap; word-break:break-all; background:transparent; color:transparent; caret-color:#1c1c1a; border:none; outline:none; resize:none; overflow:hidden"></textarea>
+                </div>
+                <sc-if value="{{ c.running }}" hint-placeholder-val="{{ false }}">
+                  <div style="margin-top:8px; font-size:12px; color:#6f6f6a; border:1px solid #e6e6e1; border-radius:4px; padding:8px 14px">{{ c.runningNote }}</div>
+                </sc-if>
+                <sc-if value="{{ c.hasOutputs }}" hint-placeholder-val="{{ false }}">
+                  <div style="border-left:2px solid #d8d8d2; padding:6px 14px; margin-top:8px; font-family:ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size:12.5px; line-height:1.6">
+                    <sc-for list="{{ c.outputs }}" as="o" hint-placeholder-count="1">
+                      <div style="white-space:pre-wrap; word-break:break-word; color:{{ o.color }}">{{ o.text }}</div>
+                    </sc-for>
+                  </div>
+                </sc-if>
+              </sc-if>
+            </div>
+          </div>
+        </div>
+      </sc-for>
+      <div onDragOver="{{ endDragOver }}" onDrop="{{ endDrop }}" style="padding-top:2px">
+        <div style="height:2px; background:#1c1c1a; opacity:{{ endDropOpacity }}; margin:1px 0; transition:opacity 0.12s"></div>
+        <div style="display:flex; gap:8px; margin-top:14px; padding-left:66px">
+          <button onClick="{{ addMdEnd }}" style="border:1px dashed #c2c2bb; background:transparent; color:#6f6f6a; font-family:inherit; font-weight:500; font-size:12.5px; padding:6px 18px; border-radius:3px; cursor:pointer" style-hover="border-color:#1c1c1a; color:#1c1c1a">＋ 文本</button>
+          <button onClick="{{ addCodeEnd }}" style="border:1px dashed #c2c2bb; background:transparent; color:#6f6f6a; font-family:inherit; font-weight:500; font-size:12.5px; padding:6px 18px; border-radius:3px; cursor:pointer" style-hover="border-color:#1c1c1a; color:#1c1c1a">＋ 代码</button>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;showSidebar&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;布局&quot;},&quot;showExecCount&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;布局&quot;},&quot;showResultValue&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;执行&quot;}}">
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    let doc = null;
+    try { doc = JSON.parse(localStorage.getItem('organic-notebook-v1') || 'null'); } catch (e) {}
+    if (!doc || !doc.notebooks || !doc.notebooks.length) doc = this.seed();
+    this.state = { doc, editingId: null, dragId: null, dropId: null, pyStatus: 'idle', runningIds: {} };
+  }
+  seed() {
+    return { activeId: 'nb1', notebooks: [{ id: 'nb1', title: '教学演示：可执行笔记', counter: 0, cells: [
+      { id: 'c1', type: 'md', source: '# 欢迎使用可执行笔记本\n\n这是一个**教学演示**笔记：文本用 Markdown 书写，代码可以直接在页面里运行。\n\n- 双击任意文本 cell 进入编辑，`Shift+Enter` 完成\n- 代码 cell 里按 `Shift+Enter` 运行，`Tab` 缩进\n- 拖动左侧 ⠿ 手柄调整顺序，所有改动自动保存在本地', outputs: [] },
+      { id: 'c2', type: 'code', lang: 'js', source: "// JavaScript 示例：斐波那契数列\nfunction fib(n) {\n  return n < 2 ? n : fib(n - 1) + fib(n - 2);\n}\nconst seq = Array.from({ length: 10 }, (_, i) => fib(i));\nconsole.log('前 10 项:', seq.join(', '));\nseq.reduce((a, b) => a + b, 0);", outputs: [] },
+      { id: 'c3', type: 'md', source: '## Python 也可以\n\n下面的 cell 用 **Python** 运行。首次运行会在后台下载 Pyodide 运行时，需要等待片刻：', outputs: [] },
+      { id: 'c4', type: 'code', lang: 'py', source: "# Python 示例：列表推导\nsquares = [n * n for n in range(1, 11)]\nprint('平方数:', squares)\nsum(squares)", outputs: [] }
+    ] }] };
+  }
+  save() { try { localStorage.setItem('organic-notebook-v1', JSON.stringify(this.state.doc)); } catch (e) {} }
+  nb(doc) { const d = doc || this.state.doc; return d.notebooks.find(n => n.id === d.activeId) || d.notebooks[0]; }
+  mutate(f, extra) {
+    this.setState(s => {
+      const doc = JSON.parse(JSON.stringify(s.doc));
+      f(doc, doc.notebooks.find(n => n.id === doc.activeId) || doc.notebooks[0]);
+      return Object.assign({ doc }, extra || {});
+    }, () => this.save());
+  }
+  componentDidMount() {
+    this.save();
+    this._libT = setInterval(() => {
+      if (window.hljs && window.marked) { clearInterval(this._libT); this._libT = null; this.forceUpdate(); }
+    }, 250);
+    setTimeout(() => { if (this._libT) { clearInterval(this._libT); this._libT = null; } }, 15000);
+  }
+  componentWillUnmount() { if (this._libT) clearInterval(this._libT); }
+  esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  renderMd(src) {
+    if (!src || !src.trim()) return '<p style="color:#a3a39c">（空文本 — 双击编辑）</p>';
+    try { if (window.marked) return window.marked.parse(src, { breaks: true, gfm: true }); } catch (e) {}
+    return '<p>' + this.esc(src).replace(/\n/g, '<br>') + '</p>';
+  }
+  hl(src, lang) {
+    const tail = src.endsWith('\n') ? '\n' : '';
+    try { if (window.hljs) return window.hljs.highlight(src, { language: lang === 'py' ? 'python' : 'javascript', ignoreIllegals: true }).value + tail; } catch (e) {}
+    return this.esc(src) + tail;
+  }
+  fmt(v) {
+    if (v === undefined) return 'undefined';
+    if (v === null) return 'null';
+    if (typeof v === 'string') return v;
+    if (typeof v === 'function') return '[function ' + (v.name || 'anonymous') + ']';
+    if (v instanceof Error) return String(v);
+    try { const s = JSON.stringify(v, null, 1); return s ? s.replace(/\n\s*/g, ' ') : String(v); } catch (e) { return String(v); }
+  }
+  async runJs(src, push) {
+    const AF = Object.getPrototypeOf(async function () {}).constructor;
+    const fmt = this.fmt.bind(this);
+    const cons = {
+      log: (...a) => push('log', a.map(fmt).join(' ')),
+      info: (...a) => push('log', a.map(fmt).join(' ')),
+      warn: (...a) => push('warn', a.map(fmt).join(' ')),
+      error: (...a) => push('error', a.map(fmt).join(' '))
+    };
+    let fn = null;
+    try { fn = new AF('console', '"use strict";\nreturn (\n' + src + '\n);'); } catch (e) {}
+    if (!fn) fn = new AF('console', '"use strict";\n' + src);
+    const r = await fn(cons);
+    if (r !== undefined) push('result', '→ ' + fmt(r));
+  }
+  async ensurePyodide() {
+    if (this.pyodide) return this.pyodide;
+    if (!this.pyodideP) {
+      this.setState({ pyStatus: 'loading' });
+      this.pyodideP = (async () => {
+        if (!window.loadPyodide) {
+          await new Promise((res, rej) => {
+            const s = document.createElement('script');
+            s.src = 'https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js';
+            s.onload = res; s.onerror = () => rej(new Error('Pyodide 脚本加载失败，请检查网络'));
+            document.head.appendChild(s);
+          });
+        }
+        return await window.loadPyodide({ indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.26.4/full/' });
+      })();
+    }
+    try { this.pyodide = await this.pyodideP; } catch (e) { this.pyodideP = null; this.setState({ pyStatus: 'idle' }); throw e; }
+    this.setState({ pyStatus: 'ready' });
+    return this.pyodide;
+  }
+  async runPy(src, push) {
+    const py = await this.ensurePyodide();
+    py.setStdout({ batched: t => push('log', t) });
+    py.setStderr({ batched: t => push('error', t) });
+    const r = await py.runPythonAsync(src);
+    if (r !== undefined && r !== null) push('result', '→ ' + String(r));
+    if (r && typeof r.destroy === 'function') try { r.destroy(); } catch (e) {}
+  }
+  async runCell(id) {
+    const cell = this.nb().cells.find(c => c.id === id);
+    if (!cell || cell.type !== 'code' || this.state.runningIds[id]) return;
+    this.setState(s => ({ runningIds: Object.assign({}, s.runningIds, { [id]: true }) }));
+    this.mutate((d, n) => { const c = n.cells.find(x => x.id === id); if (c) c.outputs = []; });
+    const outputs = [];
+    const push = (kind, text) => outputs.push({ kind, text });
+    try {
+      if (cell.lang === 'py') await this.runPy(cell.source, push);
+      else await this.runJs(cell.source, push);
+    } catch (e) { push('error', String((e && e.message) || e)); }
+    this.mutate((d, n) => {
+      const c = n.cells.find(x => x.id === id); if (!c) return;
+      c.outputs = outputs;
+      n.counter = (n.counter || 0) + 1;
+      c.execN = n.counter;
+    });
+    this.setState(s => { const r = Object.assign({}, s.runningIds); delete r[id]; return { runningIds: r }; });
+  }
+  async runAll() {
+    for (const c of this.nb().cells.slice()) if (c.type === 'code') await this.runCell(c.id);
+  }
+  addCell(index, type, lang) {
+    const id = 'c' + Date.now() + Math.floor(Math.random() * 1000);
+    this.mutate((d, n) => {
+      const cell = type === 'md' ? { id, type: 'md', source: '', outputs: [] } : { id, type: 'code', lang: lang || 'js', source: '', outputs: [] };
+      n.cells.splice(index == null ? n.cells.length : index, 0, cell);
+    }, { editingId: type === 'md' ? id : null });
+  }
+  onDropTo(targetId) {
+    const dragId = this.state.dragId;
+    this.setState({ dragId: null, dropId: null });
+    if (!dragId || dragId === targetId) return;
+    this.mutate((d, n) => {
+      const i = n.cells.findIndex(c => c.id === dragId); if (i < 0) return;
+      const [cell] = n.cells.splice(i, 1);
+      let j = targetId === 'end' ? n.cells.length : n.cells.findIndex(c => c.id === targetId);
+      if (j < 0) j = n.cells.length;
+      n.cells.splice(j, 0, cell);
+    });
+  }
+  renderVals() {
+    const showSidebar = this.props.showSidebar !== false;
+    const showExecCount = this.props.showExecCount !== false;
+    const showResultValue = this.props.showResultValue !== false;
+    const doc = this.state.doc;
+    const nb = this.nb();
+    const st = this.state;
+    const colorFor = k => k === 'error' ? '#9c3423' : k === 'warn' ? '#8a6d1f' : k === 'result' ? '#3f5a7d' : '#1c1c1a';
+    const cells = nb.cells.map((c, i) => {
+      const editing = st.editingId === c.id;
+      const running = !!st.runningIds[c.id];
+      const isCode = c.type === 'code';
+      return {
+        id: c.id, source: c.source,
+        isMd: !isCode, isCode, editing, notEditing: !editing,
+        showBadge: isCode && showExecCount,
+        badge: running ? '[*]' : (c.execN ? '[' + c.execN + ']' : '[ ]'),
+        jsBg: c.lang === 'js' ? '#1c1c1a' : 'transparent',
+        jsColor: c.lang === 'js' ? '#fdfdfc' : '#a3a39c',
+        pyBg: c.lang === 'py' ? '#1c1c1a' : 'transparent',
+        pyColor: c.lang === 'py' ? '#fdfdfc' : '#a3a39c',
+        runLabel: running ? '运行中…' : '运行',
+        running,
+        runningNote: c.lang === 'py' && st.pyStatus !== 'ready' ? '正在加载 Python 运行时（首次约 10–20 秒）…' : '运行中…',
+        mdHtml: { __html: this.renderMd(c.source) },
+        hlHtml: { __html: this.hl(c.source || '', c.lang) },
+        rows: Math.max(3, (c.source || '').split('\n').length + 1),
+        outputs: (c.outputs || []).filter(o => showResultValue || o.kind !== 'result').map(o => ({ text: o.text, color: colorFor(o.kind) })),
+        hasOutputs: (c.outputs || []).filter(o => showResultValue || o.kind !== 'result').length > 0 && !running,
+        dropOpacity: st.dropId === c.id && st.dragId ? 1 : 0,
+        run: () => this.runCell(c.id),
+        edit: () => this.setState({ editingId: c.id }),
+        doneEdit: () => { this.setState({ editingId: null }); this.save(); },
+        onInput: e => { const v = e.target.value; this.mutate((d, n) => { const x = n.cells.find(y => y.id === c.id); if (x) x.source = v; }); },
+        onKeyDown: e => {
+          if (e.key === 'Enter' && e.shiftKey) {
+            e.preventDefault();
+            if (isCode) this.runCell(c.id); else this.setState({ editingId: null });
+          } else if (e.key === 'Tab' && isCode) {
+            e.preventDefault();
+            const t = e.target, s0 = t.selectionStart, s1 = t.selectionEnd;
+            const v = t.value.slice(0, s0) + '  ' + t.value.slice(s1);
+            this.mutate((d, n) => { const x = n.cells.find(y => y.id === c.id); if (x) x.source = v; });
+            requestAnimationFrame(() => { try { t.selectionStart = t.selectionEnd = s0 + 2; } catch (err) {} });
+          }
+        },
+        remove: () => this.mutate((d, n) => { n.cells = n.cells.filter(x => x.id !== c.id); }),
+        addMdBelow: () => this.addCell(i + 1, 'md'),
+        addCodeBelow: () => this.addCell(i + 1, 'code', isCode ? c.lang : 'js'),
+        setJs: () => this.mutate((d, n) => { const x = n.cells.find(y => y.id === c.id); if (x) x.lang = 'js'; }),
+        setPy: () => this.mutate((d, n) => { const x = n.cells.find(y => y.id === c.id); if (x) x.lang = 'py'; }),
+        onDragStart: e => { try { e.dataTransfer.setData('text/plain', c.id); e.dataTransfer.effectAllowed = 'move'; } catch (err) {} this.setState({ dragId: c.id }); },
+        onDragEnd: () => this.setState({ dragId: null, dropId: null }),
+        onDragOver: e => { if (!st.dragId) return; e.preventDefault(); if (this.state.dropId !== c.id) this.setState({ dropId: c.id }); },
+        onDrop: e => { e.preventDefault(); this.onDropTo(c.id); }
+      };
+    });
+    const notebooks = doc.notebooks.map(n => ({
+      id: n.id, title: n.title || '未命名笔记',
+      bg: n.id === doc.activeId ? '#f0f0ec' : 'transparent',
+      weight: n.id === doc.activeId ? 600 : 400,
+      select: () => this.mutate(d => { d.activeId = n.id; }, { editingId: null }),
+      remove: e => {
+        e.stopPropagation();
+        this.mutate(d => {
+          d.notebooks = d.notebooks.filter(x => x.id !== n.id);
+          if (!d.notebooks.length) d.notebooks = [{ id: 'nb' + Date.now(), title: '未命名笔记', counter: 0, cells: [{ id: 'c' + Date.now(), type: 'md', source: '# 新笔记\n\n双击这里开始编辑。', outputs: [] }] }];
+          if (d.activeId === n.id) d.activeId = d.notebooks[0].id;
+        });
+      }
+    }));
+    return {
+      showSidebar, notebooks, cells,
+      title: nb.title,
+      rename: e => { const v = e.target.value; this.mutate((d, n) => { n.title = v; }); },
+      addNotebook: () => {
+        const id = 'nb' + Date.now();
+        this.mutate(d => {
+          d.notebooks.push({ id, title: '未命名笔记 ' + (d.notebooks.length + 1), counter: 0, cells: [
+            { id: 'c' + Date.now(), type: 'md', source: '# 新笔记\n\n双击这里开始编辑。', outputs: [] },
+            { id: 'c' + (Date.now() + 1), type: 'code', lang: 'js', source: '', outputs: [] }
+          ] });
+          d.activeId = id;
+        });
+      },
+      runAll: () => this.runAll(),
+      clearOutputs: () => this.mutate((d, n) => { n.cells.forEach(c => { c.outputs = []; c.execN = null; }); n.counter = 0; }),
+      addMdEnd: () => this.addCell(null, 'md'),
+      addCodeEnd: () => this.addCell(null, 'code'),
+      endDragOver: e => { if (!st.dragId) return; e.preventDefault(); if (this.state.dropId !== 'end') this.setState({ dropId: 'end' }); },
+      endDrop: e => { e.preventDefault(); this.onDropTo('end'); },
+      endDropOpacity: st.dropId === 'end' && st.dragId ? 1 : 0,
+      pyLabel: st.pyStatus === 'ready' ? '就绪' : st.pyStatus === 'loading' ? '加载中…' : '未加载（首次运行时加载）',
+      pyDotColor: st.pyStatus === 'ready' ? '#4b7d5b' : st.pyStatus === 'loading' ? '#b58b3a' : '#c2c2bb'
+    };
+  }
+}
+</script>
+</body>
+</html>

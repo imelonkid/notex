@@ -1,0 +1,34 @@
+{
+  "id": "solarized",
+  "name": "Solarized Light",
+  "appearance": "light",
+  "tokens": {
+    "bg": "#fdf6e3",
+    "bg-subtle": "#f5eed8",
+    "bg-hover": "#eee8d5",
+    "bg-active": "#e8e1cc",
+    "border": "#e4dcc4",
+    "border-strong": "#d3cbb3",
+    "fg": "#586e75",
+    "fg-soft": "#657b83",
+    "fg-muted": "#839496",
+    "fg-faint": "#93a1a1",
+    "fg-ghost": "#b8c0bd",
+    "fg-invert": "#fdf6e3",
+    "accent": "#268bd2",
+    "danger": "#dc322f",
+    "warn": "#b58900",
+    "success": "#859900",
+    "syn-keyword": "#859900",
+    "syn-string": "#2aa198",
+    "syn-comment": "#93a1a1",
+    "syn-number": "#d33682",
+    "syn-type": "#b58900",
+    "syn-function": "#268bd2",
+    "syn-variable": "#586e75",
+    "editor-selection": "#dfd8c0"
+  },
+  "fonts": {
+    "heading": "'Iowan Old Style', Georgia, serif"
+  }
+}
