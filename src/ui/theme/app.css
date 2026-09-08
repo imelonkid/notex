@@ -32,23 +32,60 @@ button {
   overflow: hidden;
   background: var(--nb-bg);
 }
+.xnb-app[data-collapsed='true'] .xnb-page {
+  padding-left: max(var(--nb-page-pad-x), 44px);
+}
 
 .xnb-sidebar {
   width: var(--nb-sidebar-width);
   flex: none;
   display: flex;
   flex-direction: column;
-  padding: 22px 14px 0;
+  padding: 18px 14px 0;
   border-right: 1px solid var(--nb-border);
   box-sizing: border-box;
   background: var(--nb-bg);
+  overflow: hidden;
+  transition: width 0.16s ease, padding 0.16s ease;
+}
+.xnb-sidebar[data-collapsed='true'] {
+  width: 0;
+  padding-left: 0;
+  padding-right: 0;
+  border-right-color: transparent;
+}
+
+/* 折叠/展开按钮 */
+.xnb-sidebar-toggle {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--nb-fg-faint);
+  border-radius: var(--nb-radius-sm);
+  padding: 3px 7px;
+  font-size: 14px;
+  line-height: 1;
+  flex: none;
+}
+.xnb-sidebar-toggle:hover {
+  color: var(--nb-fg);
+  background: var(--nb-bg-hover);
+}
+/* 折叠后浮在左上角，不占布局 */
+.xnb-sidebar-toggle[data-floating='true'] {
+  position: fixed;
+  top: 12px;
+  left: 10px;
+  z-index: 20;
+  background: var(--nb-bg);
+  border-color: var(--nb-border);
 }
 
 .xnb-brand {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 8px;
-  padding: 0 10px 20px;
+  padding: 0 4px 18px 10px;
+  white-space: nowrap;
 }
 .xnb-brand-name {
   font-family: var(--nb-font-heading);
@@ -212,14 +249,14 @@ button {
 .xnb-page {
   max-width: var(--nb-content-width);
   margin: 0 auto;
-  padding: 40px 44px 45vh;
+  padding: var(--nb-page-pad-top) var(--nb-page-pad-x) 40vh;
   box-sizing: border-box;
 }
 
 .xnb-title-input {
   font-family: var(--nb-font-heading);
   font-weight: 500;
-  font-size: 34px;
+  font-size: 30px;
   color: var(--nb-fg);
   background: transparent;
   border: none;
@@ -233,9 +270,9 @@ button {
   gap: 8px;
   flex-wrap: wrap;
   align-items: center;
-  padding: 10px 0 16px;
+  padding: 10px 0 14px;
   border-bottom: 1px solid var(--nb-border);
-  margin-bottom: 14px;
+  margin-bottom: 12px;
 }
 .xnb-hint {
   font-size: 12px;
@@ -245,8 +282,8 @@ button {
 /* Cell */
 .xnb-cell {
   display: grid;
-  grid-template-columns: 52px minmax(0, 1fr);
-  gap: 0 14px;
+  grid-template-columns: var(--nb-gutter-width) minmax(0, 1fr);
+  gap: 0 10px;
   align-items: start;
   padding: 10px 8px 14px 0;
   border-radius: var(--nb-radius);
@@ -582,7 +619,7 @@ button {
   display: flex;
   gap: 8px;
   margin-top: 14px;
-  padding-left: 66px;
+  padding-left: calc(var(--nb-gutter-width) + 10px);
 }
 .xnb-btn-dashed {
   border: 1px dashed var(--nb-fg-ghost);

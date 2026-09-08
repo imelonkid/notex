@@ -23,12 +23,31 @@ export function App() {
   const [dropId, setDropId] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [depsStatus, setDepsStatus] = useState<Record<string, string>>({});
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(
+    () => localStorage.getItem('xnb.sidebar.collapsed') === '1',
+  );
   const wsRef = useRef(ws);
   wsRef.current = ws;
 
   useEffect(() => {
     saveWorkspace(ws);
   }, [ws]);
+
+  useEffect(() => {
+    localStorage.setItem('xnb.sidebar.collapsed', sidebarCollapsed ? '1' : '0');
+  }, [sidebarCollapsed]);
+
+  // Cmd/Ctrl+B 切换侧栏，和常见编辑器一致
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'b') {
+        e.preventDefault();
+        setSidebarCollapsed((c) => !c);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   const nb = findNotebook(ws);
 
@@ -161,11 +180,32 @@ export function App() {
   void revision;
 
   return (
-    <div className="xnb-app">
-      <aside className="xnb-sidebar">
+    <div className="xnb-app" data-collapsed={sidebarCollapsed}>
+      {sidebarCollapsed && (
+        <button
+          className="xnb-sidebar-toggle"
+          data-floating="true"
+          title="展开侧栏（⌘B）"
+          aria-label="展开侧栏"
+          onClick={() => setSidebarCollapsed(false)}
+        >
+          ›
+        </button>
+      )}
+
+      <aside className="xnb-sidebar" data-collapsed={sidebarCollapsed}>
         <div className="xnb-brand">
           <div className="xnb-brand-name">xnotebook</div>
           <div className="xnb-brand-sub">可执行笔记</div>
+          <span style={{ flex: 1 }} />
+          <button
+            className="xnb-sidebar-toggle"
+            title="折叠侧栏（⌘B）"
+            aria-label="折叠侧栏"
+            onClick={() => setSidebarCollapsed(true)}
+          >
+            ‹
+          </button>
         </div>
 
         <div className="xnb-section-label">我的笔记</div>

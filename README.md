@@ -118,6 +118,21 @@ StringUtils.reverse("xnotebook")
 两处同 id 时用户目录优先。主题包可以附带一个 CSS 文件，在 `css` 字段里写文件名。组件不写死任何颜色，
 CodeMirror 高亮与 Markdown 代码块共用同一组 `--nb-syn-*` 变量，三处配色永远一致。
 
+## 布局与快捷键
+
+- `⌘B` / `Ctrl+B` 折叠或展开左侧栏，状态记在本地
+- 内容区宽度、页面留白、左侧装订线宽度都是 token，可在主题包里覆盖：
+  `content-width`、`page-pad-x`、`page-pad-top`、`gutter-width`
+
+## 关于 Java 的两个进程
+
+运行 Java 时会看到两个 `java` 进程，这是 JShell 的设计：一个是内核本身，
+负责编译与消息转发；另一个是隔离的执行 JVM，用户代码跑在里面。
+正因为隔离，死循环才能被中断，用户代码也无法把内核搞崩。
+
+两个进程都带了 `-Dapple.awt.UIElement=true`，在 macOS 上不会弹出 Dock 图标，
+也不会抢走当前窗口的焦点。内核进程另外带 `-Djava.awt.headless=true`。
+
 ## 已知限制
 
 - 三个内核相互独立，不共享变量。这是刻意的简化。

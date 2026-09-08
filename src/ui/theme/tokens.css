@@ -38,7 +38,10 @@
   /* 形状与尺寸 */
   --nb-radius: 4px;
   --nb-radius-sm: 3px;
-  --nb-content-width: 860px;
+  --nb-content-width: 1600px;
+  --nb-page-pad-x: 28px;
+  --nb-page-pad-top: 28px;
+  --nb-gutter-width: 40px;
   --nb-sidebar-width: 230px;
 
   /* 代码高亮 */

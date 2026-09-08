@@ -78,8 +78,15 @@ export const javaProvider: RuntimeProvider = {
 
   async launch(host, info: RuntimeInfo) {
     const script = await host.kernelPath('java/JavaKernel.java');
-    // -XX:TieredStopAtLevel=1 让内核自身启动更快，用户代码在独立 JVM 中不受影响
-    const proc = await host.spawn(info.path, ['-XX:TieredStopAtLevel=1', '-XX:+UseSerialGC', script]);
+    const proc = await host.spawn(info.path, [
+      // 内核进程自己不需要图形界面；headless 顺带避免 macOS 上弹出 Dock 图标
+      '-Djava.awt.headless=true',
+      '-Dapple.awt.UIElement=true',
+      // 内核只做编译与转发，分层编译到第一层即可，启动更快
+      '-XX:TieredStopAtLevel=1',
+      '-XX:+UseSerialGC',
+      script,
+    ]);
     return connectStdioKernel(proc);
   },
 

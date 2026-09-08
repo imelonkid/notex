@@ -38,6 +38,14 @@ public class JavaKernel {
                 .out(new PrintStream(new StreamSink("stdout"), true, StandardCharsets.UTF_8))
                 .err(new PrintStream(new StreamSink("stderr"), true, StandardCharsets.UTF_8))
                 .in(new ByteArrayInputStream(new byte[0]))
+                // JShell 会另起一个 JVM 执行用户代码（这是中断和隔离的前提）。
+                // 在 macOS 上它默认会注册成前台应用，弹出 Dock 图标并抢走焦点，
+                // UIElement 让它以后台身份运行；其余参数只为压低启动开销。
+                .remoteVMOptions(
+                        "-Dapple.awt.UIElement=true",
+                        "-XX:TieredStopAtLevel=1",
+                        "-XX:+UseSerialGC",
+                        "-Xshare:auto")
                 .build();
         analysis = shell.sourceCodeAnalysis();
         try {
