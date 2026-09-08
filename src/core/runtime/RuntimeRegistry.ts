@@ -101,6 +101,7 @@ export class RuntimeRegistry {
     if (!force && cur.status === 'available' && cur.info) return cur;
 
     this.patch(lang, { status: 'detecting', error: undefined });
+    let reason: string | undefined;
     for (const provider of this.providersFor(lang)) {
       try {
         const info = await provider.detect(this.host);
@@ -110,11 +111,11 @@ export class RuntimeRegistry {
           return this.get(lang);
         }
       } catch (e) {
-        // 单个 provider 探测失败不影响其它 provider
-        console.warn(`[xnotebook] ${provider.id} 探测失败`, e);
+        // 单个 provider 探测失败不影响其它 provider，但原因要留给用户看
+        reason = String((e as Error)?.message ?? e);
       }
     }
-    this.patch(lang, { status: 'missing', info: undefined, provider: undefined });
+    this.patch(lang, { status: 'missing', info: undefined, provider: undefined, error: reason });
     this.saveCache();
     return this.get(lang);
   }

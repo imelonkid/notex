@@ -67,27 +67,52 @@ export function versionAtLeast(version: string, min: string): boolean {
   return true;
 }
 
-/** 依次尝试一组候选可执行文件路径，返回第一个能跑通版本命令的 */
+/** 单个候选是否可用；不可用时返回原因，便于向用户解释 */
+async function probe(
+  host: HostBridge,
+  candidate: string,
+  versionArgs: string[],
+  minVersion: string,
+): Promise<{ path: string; version: string } | { reason: string }> {
+  let text: string;
+  try {
+    const res = await host.exec(candidate, versionArgs);
+    text = (res.stdout + '\n' + res.stderr).trim();
+  } catch (e) {
+    return { reason: `无法执行：${String((e as Error)?.message ?? e)}` };
+  }
+  if (!text) return { reason: '没有输出版本信息，可能不是有效的可执行文件' };
+  const version = parseVersion(text);
+  if (!versionAtLeast(version, minVersion)) {
+    return { reason: `版本 ${version} 低于要求的 ${minVersion}` };
+  }
+  return { path: candidate, version };
+}
+
+/**
+ * 依次尝试候选可执行文件。
+ * 用户手动指定的路径若不可用，直接报错而不是静默换一个，
+ * 否则用户会困惑为什么设置没生效。
+ */
 export async function firstWorking(
   host: HostBridge,
   candidates: (string | null | undefined)[],
   versionArgs: string[],
   minVersion: string,
+  manualPath?: string | null,
 ): Promise<{ path: string; version: string } | null> {
+  if (manualPath) {
+    const result = await probe(host, manualPath, versionArgs, minVersion);
+    if ('path' in result) return result;
+    throw new Error(`手动指定的路径不可用（${manualPath}）：${result.reason}`);
+  }
+
   const seen = new Set<string>();
   for (const candidate of candidates) {
     if (!candidate || seen.has(candidate)) continue;
     seen.add(candidate);
-    try {
-      const res = await host.exec(candidate, versionArgs);
-      const text = (res.stdout + '\n' + res.stderr).trim();
-      if (!text) continue;
-      const version = parseVersion(text);
-      if (!versionAtLeast(version, minVersion)) continue;
-      return { path: candidate, version };
-    } catch {
-      /* 换下一个候选 */
-    }
+    const result = await probe(host, candidate, versionArgs, minVersion);
+    if ('path' in result) return result;
   }
   return null;
 }

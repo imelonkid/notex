@@ -3,11 +3,12 @@ import type { RuntimeInfo, RuntimeProvider } from '@core/runtime/types';
 import { connectStdioKernel, firstWorking } from './stdioKernel';
 
 /** 收集一种语言的候选可执行文件：手动指定 → 环境变量 → PATH → 版本管理器目录 */
+function manualPathFor(lang: 'java' | 'python' | 'js'): string | null {
+  return localStorage.getItem(`xnb.runtime.path.${lang}`);
+}
+
 async function candidatesFor(host: HostBridge, lang: 'java' | 'python' | 'js'): Promise<string[]> {
   const out: (string | null | undefined)[] = [];
-  const manual = localStorage.getItem(`xnb.runtime.path.${lang}`);
-  if (manual) out.push(manual);
-
   const home = (await host.env('HOME')) ?? (await host.env('USERPROFILE')) ?? '';
   const win = host.platform() === 'win32';
 
@@ -54,7 +55,13 @@ export const javaProvider: RuntimeProvider = {
 
   async detect(host) {
     if (!host.canSpawn) return null;
-    const found = await firstWorking(host, await candidatesFor(host, 'java'), ['-version'], '17');
+    const found = await firstWorking(
+      host,
+      await candidatesFor(host, 'java'),
+      ['-version'],
+      '17',
+      manualPathFor('java'),
+    );
     if (!found) return null;
 
     // jdk.jshell 只在 JDK 里，JRE 要排除掉
@@ -102,7 +109,13 @@ export const pythonProvider: RuntimeProvider = {
 
   async detect(host) {
     if (!host.canSpawn) return null;
-    const found = await firstWorking(host, await candidatesFor(host, 'python'), ['--version'], '3.8');
+    const found = await firstWorking(
+      host,
+      await candidatesFor(host, 'python'),
+      ['--version'],
+      '3.8',
+      manualPathFor('python'),
+    );
     if (!found) return null;
     return { providerId: 'python-local', version: found.version, path: found.path };
   },
@@ -138,7 +151,13 @@ export const nodeProvider: RuntimeProvider = {
 
   async detect(host) {
     if (!host.canSpawn) return null;
-    const found = await firstWorking(host, await candidatesFor(host, 'js'), ['--version'], '18');
+    const found = await firstWorking(
+      host,
+      await candidatesFor(host, 'js'),
+      ['--version'],
+      '18',
+      manualPathFor('js'),
+    );
     if (!found) return null;
     return { providerId: 'js-node', version: found.version, path: found.path };
   },
