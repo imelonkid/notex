@@ -14,7 +14,9 @@ export type Output =
   | { type: 'display'; data: Record<string, string> }
   | { type: 'error'; ename: string; evalue: string; traceback: string[] }
   /** 运行时缺失时的引导卡片，由 UI 特殊渲染 */
-  | { type: 'missing-runtime'; lang: LangId };
+  | { type: 'missing-runtime'; lang: LangId }
+  /** 依赖解析的提示信息 */
+  | { type: 'notice'; level: 'info' | 'warn'; text: string };
 
 export interface MarkdownCell {
   id: string;

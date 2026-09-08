@@ -1,0 +1,31 @@
+{
+  "id": "nord",
+  "name": "Nord Dark",
+  "appearance": "dark",
+  "tokens": {
+    "bg": "#2e3440",
+    "bg-subtle": "#3b4252",
+    "bg-hover": "#434c5e",
+    "bg-active": "#4c566a",
+    "border": "#3b4252",
+    "border-strong": "#4c566a",
+    "fg": "#eceff4",
+    "fg-soft": "#e5e9f0",
+    "fg-muted": "#d8dee9",
+    "fg-faint": "#8fbcbb",
+    "fg-ghost": "#4c566a",
+    "fg-invert": "#2e3440",
+    "accent": "#88c0d0",
+    "danger": "#bf616a",
+    "warn": "#ebcb8b",
+    "success": "#a3be8c",
+    "syn-keyword": "#81a1c1",
+    "syn-string": "#a3be8c",
+    "syn-comment": "#616e88",
+    "syn-number": "#b48ead",
+    "syn-type": "#8fbcbb",
+    "syn-function": "#88c0d0",
+    "syn-variable": "#eceff4",
+    "editor-selection": "#434c5e"
+  }
+}

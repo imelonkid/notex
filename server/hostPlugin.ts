@@ -6,7 +6,7 @@
 import type { Plugin, ViteDevServer } from 'vite';
 import { spawn as nodeSpawn, execFile, type ChildProcess as NodeChild } from 'node:child_process';
 import { promisify } from 'node:util';
-import { readFile, writeFile, access } from 'node:fs/promises';
+import { readFile, writeFile, access, readdir, mkdir, stat } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import os from 'node:os';
@@ -37,6 +37,112 @@ async function readBody(req: import('node:http').IncomingMessage): Promise<any> 
   } catch {
     return {};
   }
+}
+
+/** Maven 坐标必须严格校验后才能拼进命令行 */
+const COORD_RE = /^[\w.\-]+:[\w.\-]+:[\w.\-+]+(?::[\w.\-]+)?$/;
+
+/**
+ * 解析依赖坐标为本地 jar 路径。
+ * 有 mvn 就交给它做完整的传递依赖解析；没有则直连 Maven Central
+ * 只下载指定的 jar，并明确告知用户不含传递依赖。
+ */
+async function resolveDeps(coords: string[]): Promise<{
+  classpath: string[];
+  resolver: 'maven' | 'direct';
+  warnings: string[];
+}> {
+  const warnings: string[] = [];
+  for (const c of coords) {
+    if (!COORD_RE.test(c)) throw new Error('非法的依赖坐标：' + c);
+  }
+  if (!coords.length) return { classpath: [], resolver: 'direct', warnings };
+
+  const cacheDir = path.join(os.homedir(), '.xnotebook', 'deps');
+  await mkdir(cacheDir, { recursive: true });
+
+  // 优先走 mvn：传递依赖、BOM、exclusions 都由它处理，不自己重造
+  let hasMvn = false;
+  try {
+    await execFileAsync('mvn', ['-v'], { timeout: 20000 });
+    hasMvn = true;
+  } catch {
+    hasMvn = false;
+  }
+
+  if (hasMvn) {
+    const outFile = path.join(cacheDir, `cp-${Date.now()}.txt`);
+    const pom = [
+      '<project xmlns="http://maven.apache.org/POM/4.0.0">',
+      '<modelVersion>4.0.0</modelVersion>',
+      '<groupId>tech.xnotebook</groupId><artifactId>deps</artifactId>',
+      '<version>1</version><packaging>pom</packaging><dependencies>',
+      ...coords.map((c) => {
+        const [g, a, v, classifier] = c.split(':');
+        return (
+          `<dependency><groupId>${g}</groupId><artifactId>${a}</artifactId>` +
+          `<version>${v}</version>` +
+          (classifier ? `<classifier>${classifier}</classifier>` : '') +
+          '</dependency>'
+        );
+      }),
+      '</dependencies></project>',
+    ].join('');
+    const pomFile = path.join(cacheDir, `pom-${Date.now()}.xml`);
+    await writeFile(pomFile, pom, 'utf8');
+    try {
+      await execFileAsync(
+        'mvn',
+        ['-q', '-f', pomFile, 'dependency:build-classpath', `-Dmdep.outputFile=${outFile}`],
+        { timeout: 180000, maxBuffer: 16 * 1024 * 1024 },
+      );
+      const cp = (await readFile(outFile, 'utf8')).trim();
+      const jars = cp ? cp.split(path.delimiter).filter(Boolean) : [];
+      return { classpath: jars, resolver: 'maven', warnings };
+    } catch (e: any) {
+      // Maven 的输出尾部是通用样板，挑出真正说明原因的那几行
+      const all = String(e?.stdout || '') + '\n' + String(e?.stderr || e?.message || e);
+      const meaningful = all
+        .split('\n')
+        .map((l) => l.replace(/^\[(ERROR|WARNING)\]\s?/, '').trim())
+        .filter(
+          (l) =>
+            l &&
+            !/^(To see the full|Re-run Maven|For more information|https?:\/\/cwiki)/.test(l) &&
+            /(Could not resolve|Failed to |not found|was not found|Could not find|Non-resolvable)/i.test(l),
+        );
+      const detail = meaningful.length ? meaningful.slice(0, 3).join('\n') : all.trim().split('\n').slice(-3).join('\n');
+      throw new Error('解析依赖失败：\n' + detail);
+    } finally {
+      await Promise.allSettled([
+        writeFile(pomFile, '', 'utf8').then(() => undefined),
+      ]);
+    }
+  }
+
+  // 没有 mvn：直连 Maven Central 下载指定 jar，不做传递解析
+  warnings.push('未检测到 mvn，只下载了显式声明的 jar，不含传递依赖。装上 Maven 可获得完整解析。');
+  const classpath: string[] = [];
+  for (const c of coords) {
+    const [g, a, v, classifier] = c.split(':');
+    const name = `${a}-${v}${classifier ? '-' + classifier : ''}.jar`;
+    const dest = path.join(cacheDir, `${g}-${name}`);
+    try {
+      const st = await stat(dest);
+      if (st.size > 0) {
+        classpath.push(dest);
+        continue;
+      }
+    } catch {
+      /* 缓存未命中，继续下载 */
+    }
+    const url = `https://repo1.maven.org/maven2/${g.replace(/\./g, '/')}/${a}/${v}/${name}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`下载失败 ${c}（HTTP ${res.status}）\n${url}`);
+    await writeFile(dest, Buffer.from(await res.arrayBuffer()));
+    classpath.push(dest);
+  }
+  return { classpath, resolver: 'direct', warnings };
 }
 
 /** 只允许启动 kernels/ 目录下的脚本，防止任意命令执行 */
@@ -170,6 +276,54 @@ export function hostPlugin(): Plugin {
             const body = await readBody(req);
             await writeFile(body.path, body.content, 'utf8');
             return json(res, 200, { ok: true });
+          }
+          if (url.pathname === '/deps' && req.method === 'POST') {
+            const body = await readBody(req);
+            try {
+              return json(res, 200, await resolveDeps(body.coords ?? []));
+            } catch (e) {
+              return json(res, 200, { error: String((e as Error)?.message ?? e) });
+            }
+          }
+          if (url.pathname === '/themes') {
+            // 内置 themes/ 与用户 ~/.xnotebook/themes/ 合并，用户的同 id 覆盖内置
+            const dirs = [path.join(ROOT, 'themes'), path.join(os.homedir(), '.xnotebook', 'themes')];
+            const packs: unknown[] = [];
+            const seen = new Set<string>();
+            for (const dir of dirs.reverse()) {
+              let entries: string[] = [];
+              try {
+                entries = await readdir(dir);
+              } catch {
+                continue;
+              }
+              for (const name of entries) {
+                if (!name.endsWith('.json')) continue;
+                try {
+                  const pack = JSON.parse(await readFile(path.join(dir, name), 'utf8'));
+                  if (!pack?.id || seen.has(pack.id)) continue;
+                  // 主题包可以附带同名 .css 文件
+                  if (typeof pack.css === 'string' && !pack.css.includes('{')) {
+                    try {
+                      pack.css = await readFile(path.join(dir, pack.css), 'utf8');
+                    } catch {
+                      delete pack.css;
+                    }
+                  }
+                  seen.add(pack.id);
+                  packs.push(pack);
+                } catch {
+                  /* 单个主题坏了不影响其它 */
+                }
+              }
+            }
+            return json(res, 200, { packs, userDir: path.join(os.homedir(), '.xnotebook', 'themes') });
+          }
+          if (url.pathname === '/themes/reveal' && req.method === 'POST') {
+            // 确保用户主题目录存在，方便用户直接放文件进去
+            const dir = path.join(os.homedir(), '.xnotebook', 'themes');
+            await mkdir(dir, { recursive: true });
+            return json(res, 200, { dir });
           }
           if (url.pathname === '/exists') {
             const p = url.searchParams.get('path') ?? '';

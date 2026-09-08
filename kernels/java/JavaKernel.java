@@ -64,6 +64,7 @@ public class JavaKernel {
                 case "execute" -> submitExecute(id, str(req.get("code")));
                 case "complete" -> complete(id, str(req.get("code")), intOf(req.get("cursor")));
                 case "inspect" -> inspect(id, str(req.get("code")), intOf(req.get("cursor")));
+                case "classpath" -> addClasspath(id, req.get("paths"));
                 case "interrupt" -> {
                     stopRequested = true;
                     try { shell.stop(); } catch (Exception ignored) {}
@@ -73,6 +74,32 @@ public class JavaKernel {
             }
         }
         shutdown();
+    }
+
+    /** 把 jar 加入 JShell 类路径。已加过的跳过，重复 add 会让 JShell 报警。 */
+    final Set<String> classpath = new LinkedHashSet<>();
+
+    void addClasspath(String id, Object paths) {
+        List<String> added = new ArrayList<>();
+        if (paths instanceof List<?> list) {
+            for (Object o : list) {
+                String p = String.valueOf(o);
+                if (p.isBlank() || !classpath.add(p)) continue;
+                try {
+                    shell.addToClasspath(p);
+                    added.add(p);
+                } catch (Exception e) {
+                    classpath.remove(p);
+                    error(id, "ClasspathError", "无法加入类路径：" + p + "（" + e.getMessage() + "）", List.of());
+                }
+            }
+        }
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("id", id);
+        m.put("type", "classpath");
+        m.put("added", new ArrayList<Object>(added));
+        emit(m);
+        done(id, "ok", 0);
     }
 
     void shutdown() {

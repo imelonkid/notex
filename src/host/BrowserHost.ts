@@ -1,4 +1,11 @@
-import { type ChildProcess, type ExecResult, type HostBridge, HostCapabilityError, type Platform } from './HostBridge';
+import {
+  type ChildProcess,
+  type ExecResult,
+  type HostBridge,
+  HostCapabilityError,
+  type Platform,
+  type ResolvedDeps,
+} from './HostBridge';
 
 /** 纯浏览器宿主：没有进程和文件系统，只能跑浏览器内的 provider。 */
 export class BrowserHost implements HostBridge {
@@ -26,6 +33,9 @@ export class BrowserHost implements HostBridge {
   }
   async kernelPath(relative: string): Promise<string> {
     return relative;
+  }
+  async resolveDeps(): Promise<ResolvedDeps> {
+    throw new HostCapabilityError('解析依赖');
   }
   async readText(): Promise<string> {
     throw new HostCapabilityError('读取本地文件');

@@ -10,6 +10,8 @@ interface Props {
   index: number;
   editing: boolean;
   running: boolean;
+  /** 运行中的额外说明，例如"正在解析依赖…" */
+  busyNote?: string;
   showExecN: boolean;
   dropActive: boolean;
   onSource(value: string): void;
@@ -76,7 +78,7 @@ function LangTabs({ current, onPick }: { current: LangId; onPick(l: LangId): voi
 }
 
 export function Cell(props: Props) {
-  const { cell, editing, running, showExecN, dropActive } = props;
+  const { cell, editing, running, busyNote, showExecN, dropActive } = props;
   const { registry } = useRuntimes();
   const [mdDraft, setMdDraft] = useState(cell.source);
 
@@ -182,7 +184,7 @@ export function Cell(props: Props) {
               />
               {running && (
                 <div className="xnb-outputs" style={{ color: 'var(--nb-fg-muted)' }}>
-                  {registry.get(cell.lang).status === 'starting' ? '正在启动内核…' : '运行中…'}
+                  {busyNote ?? (registry.get(cell.lang).status === 'starting' ? '正在启动内核…' : '运行中…')}
                 </div>
               )}
               {!running && (

@@ -8,19 +8,21 @@ import {
   type Workspace,
 } from '@core/model';
 import { actions, loadWorkspace, saveWorkspace } from '@core/store';
-import { notebookToMarkdown } from '@core/serialize';
+import { exportIpynb, exportMarkdown, importNotebook } from '@core/files';
+import { parseDeps } from '@core/deps';
 import { Cell } from './components/Cell';
 import { SettingsModal } from './components/SettingsModal';
 import { useRuntimes } from './RuntimeContext';
 
 export function App() {
-  const { registry, revision } = useRuntimes();
+  const { registry, revision, host } = useRuntimes();
   const [ws, setWs] = useState<Workspace>(loadWorkspace);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [runningIds, setRunningIds] = useState<Record<string, boolean>>({});
   const [dragId, setDragId] = useState<string | null>(null);
   const [dropId, setDropId] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [depsStatus, setDepsStatus] = useState<Record<string, string>>({});
   const wsRef = useRef(ws);
   wsRef.current = ws;
 
@@ -64,6 +66,45 @@ export function App() {
         }
       };
 
+      // Java 的 //DEPS：先解析依赖并注入类路径，再执行
+      const { coords, invalid } = parseDeps(code);
+      for (const bad of invalid) {
+        push({ type: 'notice', level: 'warn', text: `无法识别的依赖坐标：${bad}` });
+      }
+      if (lang === 'java' && coords.length) {
+        setDepsStatus((d) => ({ ...d, [cellId]: `正在解析 ${coords.length} 个依赖…` }));
+        try {
+          const resolved = await host.resolveDeps(coords);
+          await session.addClasspath(resolved.classpath);
+          push({
+            type: 'notice',
+            level: 'info',
+            text: `已加入 ${resolved.classpath.length} 个 jar（${resolved.resolver === 'maven' ? 'Maven 传递解析' : '直接下载'}）`,
+          });
+          for (const w of resolved.warnings) push({ type: 'notice', level: 'warn', text: w });
+        } catch (e) {
+          push({ type: 'error', ename: 'DependencyError', evalue: String((e as Error)?.message ?? e), traceback: [] });
+          setDepsStatus((d) => {
+            const next = { ...d };
+            delete next[cellId];
+            return next;
+          });
+          setRunningIds((r) => {
+            const next = { ...r };
+            delete next[cellId];
+            return next;
+          });
+          setWs((w) => actions.setOutputs(w, cellId, outputs, lang, true));
+          return;
+        } finally {
+          setDepsStatus((d) => {
+            const next = { ...d };
+            delete next[cellId];
+            return next;
+          });
+        }
+      }
+
       registry.setBusy(lang, true);
       try {
         await session.execute(code, {
@@ -84,7 +125,7 @@ export function App() {
         setWs((w) => actions.setOutputs(w, cellId, outputs, lang, true));
       }
     },
-    [registry, runningIds],
+    [registry, runningIds, host],
   );
 
   const runAll = useCallback(async () => {
@@ -93,16 +134,12 @@ export function App() {
     }
   }, [runCell]);
 
-  const exportMarkdown = useCallback(() => {
-    const md = notebookToMarkdown(findNotebook(wsRef.current));
-    const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${nb.title || 'notebook'}.md`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  }, [nb.title]);
+  const doImport = useCallback(async () => {
+    const imported = await importNotebook();
+    if (!imported) return;
+    setWs((w) => ({ activeId: imported.id, notebooks: [...w.notebooks, imported] }));
+    setEditingId(null);
+  }, []);
 
   const insertAfter = (index: number | null, type: 'md' | 'code') => {
     const cells = findNotebook(wsRef.current).cells;
@@ -207,8 +244,14 @@ export function App() {
             <button className="xnb-btn-ghost" onClick={() => setWs((w) => actions.clearOutputs(w))}>
               清空输出
             </button>
-            <button className="xnb-btn-ghost" onClick={exportMarkdown}>
+            <button className="xnb-btn-ghost" onClick={() => exportMarkdown(findNotebook(wsRef.current))}>
               导出 Markdown
+            </button>
+            <button className="xnb-btn-ghost" onClick={() => exportIpynb(findNotebook(wsRef.current))}>
+              导出 ipynb
+            </button>
+            <button className="xnb-btn-ghost" onClick={() => void doImport()}>
+              导入…
             </button>
             <span style={{ flex: 1 }} />
             <span className="xnb-hint">Shift+Enter 运行 · 双击文本编辑 · 拖 ⠿ 排序</span>
@@ -221,6 +264,7 @@ export function App() {
               index={i}
               editing={editingId === cell.id}
               running={!!runningIds[cell.id]}
+              busyNote={depsStatus[cell.id]}
               showExecN
               dropActive={!!dragId && dropId === cell.id}
               onSource={(v) => setWs((w) => actions.updateSource(w, cell.id, v))}

@@ -50,6 +50,17 @@ export function Outputs({ outputs, lang, ranWith, onRetryDetect, onOpenSettings 
         if (out.type === 'result' || out.type === 'display') {
           return <RichData key={i} data={out.data} />;
         }
+        if (out.type === 'notice') {
+          return (
+            <div
+              key={i}
+              className="xnb-out-line"
+              style={{ color: out.level === 'warn' ? 'var(--nb-warn)' : 'var(--nb-fg-muted)' }}
+            >
+              {out.text}
+            </div>
+          );
+        }
         if (out.type === 'error') {
           return (
             <div key={i}>

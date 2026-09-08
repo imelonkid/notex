@@ -8,15 +8,41 @@ import { RuntimeProvider } from './ui/RuntimeContext';
 import { detectHost } from './host/DevServerHost';
 import type { HostBridge } from './host/HostBridge';
 
-/** 从 themes/ 目录加载主题包 */
+/**
+ * 加载主题包。优先问宿主，它会合并内置 themes/ 与用户 ~/.xnotebook/themes/；
+ * 纯浏览器模式下退回打包进来的内置主题。
+ */
 function ThemeLoader({ children }: { children: React.ReactNode }) {
   const { registerPack } = useTheme();
+
   useEffect(() => {
-    const packs = import.meta.glob<{ default: ThemePack }>('../themes/*.json');
-    for (const load of Object.values(packs)) {
-      void load().then((m) => registerPack(m.default));
-    }
+    let cancelled = false;
+
+    const loadBundled = () => {
+      const modules = import.meta.glob<{ default: ThemePack }>('../themes/*.json');
+      for (const load of Object.values(modules)) {
+        void load().then((m) => !cancelled && registerPack(m.default));
+      }
+    };
+
+    void (async () => {
+      try {
+        const res = await fetch('/__host/themes');
+        if (!res.ok) throw new Error(String(res.status));
+        const { packs } = (await res.json()) as { packs: ThemePack[] };
+        if (cancelled) return;
+        if (packs.length) packs.forEach(registerPack);
+        else loadBundled();
+      } catch {
+        loadBundled();
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [registerPack]);
+
   return <>{children}</>;
 }
 

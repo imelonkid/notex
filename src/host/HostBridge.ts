@@ -32,6 +32,12 @@ export interface ExecResult {
 
 export type Platform = 'darwin' | 'win32' | 'linux';
 
+export interface ResolvedDeps {
+  classpath: string[];
+  resolver: 'maven' | 'direct';
+  warnings: string[];
+}
+
 export interface HostBridge {
   readonly id: string;
   /** 能否 spawn 本地进程。false 时只有浏览器内 provider 可用。 */
@@ -45,6 +51,9 @@ export interface HostBridge {
   env(name: string): Promise<string | undefined>;
   /** 内核脚本在宿主上的绝对路径 */
   kernelPath(relative: string): Promise<string>;
+
+  /** 解析 Maven 坐标为本地 jar 路径 */
+  resolveDeps(coords: string[]): Promise<ResolvedDeps>;
 
   readText(path: string): Promise<string>;
   writeText(path: string, content: string): Promise<void>;

@@ -3,6 +3,7 @@ import {
   type ExecResult,
   type HostBridge,
   type Platform,
+  type ResolvedDeps,
   type SpawnOptions,
 } from './HostBridge';
 
@@ -146,6 +147,12 @@ export class DevServerHost implements HostBridge {
 
   async kernelPath(relative: string): Promise<string> {
     return this.kernelsDir ? `${this.kernelsDir}/${relative}` : relative;
+  }
+
+  async resolveDeps(coords: string[]): Promise<ResolvedDeps> {
+    const r = await postJson<ResolvedDeps & { error?: string }>('/deps', { coords });
+    if (r.error) throw new Error(r.error);
+    return r;
   }
 
   async readText(path: string): Promise<string> {

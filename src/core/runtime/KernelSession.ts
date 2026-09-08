@@ -74,6 +74,7 @@ export class KernelSession {
         this.pending.delete(msg.id);
         p.resolve(msg.status);
         break;
+      case 'classpath':
       case 'ready':
         break;
     }
@@ -124,6 +125,18 @@ export class KernelSession {
     await Promise.race([done, new Promise((r) => setTimeout(r, timeoutMs))]);
     this.pending.delete(id);
     return text;
+  }
+
+  /** 把 jar 加入内核类路径。仅 Java 内核有意义，其它内核会忽略。 */
+  async addClasspath(paths: string[]): Promise<void> {
+    if (this.disposed || !paths.length) return;
+    const id = nextId();
+    const done = new Promise<void>((resolve) => {
+      this.pending.set(id, { resolve: () => resolve() });
+    });
+    await this.conn.send(encodeRequest({ id, op: 'classpath', paths }));
+    await Promise.race([done, new Promise((r) => setTimeout(r, 15000))]);
+    this.pending.delete(id);
   }
 
   /**

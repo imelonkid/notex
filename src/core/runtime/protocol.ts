@@ -10,6 +10,7 @@ export type KernelRequest =
   | { id: string; op: 'execute'; code: string }
   | { id: string; op: 'complete'; code: string; cursor: number }
   | { id: string; op: 'inspect'; code: string; cursor: number }
+  | { id: string; op: 'classpath'; paths: string[] }
   | { id: string; op: 'interrupt'; target: string }
   | { id: string; op: 'shutdown' };
 
@@ -27,6 +28,7 @@ export type KernelResponse =
   | { id: string; type: 'error'; ename: string; evalue: string; traceback: string[] }
   | { id: string; type: 'completions'; anchor: number; items: CompletionItem[] }
   | { id: string; type: 'inspection'; text: string }
+  | { id: string; type: 'classpath'; added: string[] }
   | { id: string; type: 'done'; status: 'ok' | 'error' | 'aborted'; durationMs?: number };
 
 export function encodeRequest(req: KernelRequest): string {
