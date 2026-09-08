@@ -40,7 +40,18 @@ function Boot() {
   );
 }
 
-createRoot(document.getElementById('root')!).render(
+const container = document.getElementById('root')!;
+
+// HMR 时复用同一个 root，否则两个 root 会争抢同一容器，
+// 触发 CodeMirror 卸载期的 removeChild 报错
+declare global {
+  interface Window {
+    __xnbRoot?: ReturnType<typeof createRoot>;
+  }
+}
+const root = (window.__xnbRoot ??= createRoot(container));
+
+root.render(
   <StrictMode>
     <ThemeProvider>
       <ThemeLoader>
