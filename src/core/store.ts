@@ -25,13 +25,14 @@ function seed(): Workspace {
     cells: [
       newMarkdownCell(
         '# 欢迎使用 xnotebook\n\n' +
-          '文本用 Markdown 书写，代码可以直接在页面里运行。\n\n' +
-          '- 双击任意文本 cell 进入编辑，`Shift+Enter` 完成\n' +
-          '- 代码 cell 里按 `Shift+Enter` 运行\n' +
-          '- 用代码 cell 左上角的 tab 切换 **Java / Python / JS**，源码不会丢失\n' +
+          '文本用 Markdown 书写，代码直接在页面里运行。点代码块上的**运行**试试。\n\n' +
+          '- 双击文本 cell 进入编辑，`Shift+Enter` 完成\n' +
+          '- 代码 cell 里 `Shift+Enter` 运行，运行中按**中断**可以停下来\n' +
+          '- 用左上角的 tab 切换 **Java / Python / JS**，源码不会丢失\n' +
           '- 输入时会调用对应内核做补全，`Ctrl+Space` 强制触发\n' +
-          '- 拖动左侧 ⠿ 手柄调整顺序，所有改动自动保存在本地',
+          '- 拖左侧 ⠿ 排序，改动自动保存在本地',
       ),
+      newMarkdownCell('## 三种语言\n\n每个代码 cell 独立选择语言和内核。三个内核互不共享变量，这是刻意的简化。'),
       newCodeCell(
         'java',
         'var squares = new java.util.ArrayList<Integer>();\n' +
@@ -39,18 +40,62 @@ function seed(): Workspace {
           'System.out.println("平方数: " + squares);\n' +
           'squares.stream().mapToInt(Integer::intValue).sum()',
       ),
-      newMarkdownCell(
-        '## 同一份笔记里混用语言\n\n每个代码 cell 独立选择语言和内核。三个内核互不共享变量，这是刻意的简化。',
-      ),
       newCodeCell(
         'python',
         "squares = [n * n for n in range(1, 11)]\nprint('平方数:', squares)\nsum(squares)",
       ),
       newCodeCell(
         'js',
-        "const squares = Array.from({ length: 10 }, (_, i) => (i + 1) ** 2);\n" +
+        'const squares = Array.from({ length: 10 }, (_, i) => (i + 1) ** 2);\n' +
           "console.log('平方数:', squares.join(', '));\n" +
           'squares.reduce((a, b) => a + b, 0)',
+      ),
+      newMarkdownCell(
+        '## 富输出\n\n返回值是集合或映射时会渲染成表格，是图像时渲染成 PNG。Python 的 `_repr_html_`、JS 的 `toHTML()` 同样生效。',
+      ),
+      newCodeCell(
+        'java',
+        'java.util.List.of(\n' +
+          '  java.util.Map.of("语言", "Java", "内核", "JShell"),\n' +
+          '  java.util.Map.of("语言", "Python", "内核", "本机解释器"),\n' +
+          '  java.util.Map.of("语言", "JavaScript", "内核", "Node vm")\n' +
+          ')',
+      ),
+      newCodeCell(
+        'java',
+        'var im = new java.awt.image.BufferedImage(120, 60, java.awt.image.BufferedImage.TYPE_INT_RGB);\n' +
+          'var g = im.createGraphics();\n' +
+          'g.setColor(java.awt.Color.decode("#fdfdfc"));\n' +
+          'g.fillRect(0, 0, 120, 60);\n' +
+          'g.setColor(java.awt.Color.decode("#3f5a7d"));\n' +
+          'g.fillOval(8, 8, 44, 44);\n' +
+          'g.setColor(java.awt.Color.decode("#9c3423"));\n' +
+          'g.fillOval(64, 8, 44, 44);\n' +
+          'g.dispose();\n' +
+          'im',
+      ),
+      newMarkdownCell(
+        '## Java 依赖\n\n在 cell 顶部用 `//DEPS` 声明 Maven 坐标，运行前会自动下载并注入类路径。' +
+          '装了 Maven 会做完整的传递依赖解析。第一次运行需要等下载。',
+      ),
+      newCodeCell(
+        'java',
+        '//DEPS org.apache.commons:commons-lang3:3.14.0\n\n' +
+          'import org.apache.commons.lang3.StringUtils;\n' +
+          'System.out.println(StringUtils.reverse("xnotebook"));\n' +
+          'StringUtils.capitalize("来自 maven 的依赖")',
+      ),
+      newMarkdownCell(
+        '## 试试中断\n\n下面这个 cell **不会自己停下来**。点**运行**，再点**中断**，' +
+          '内核不会挂掉，之前 cell 里的变量也还在。\n\n' +
+          '> 因为它是死循环，**全部运行**走到这里会停在这一步，等你手动中断。',
+      ),
+      newCodeCell('python', 'n = 0\nwhile True:\n    n += 1'),
+      newMarkdownCell(
+        '## 还能做什么\n\n' +
+          '- 左下角能看到三种运行时的状态，点开是设置：切换主题、手动指定运行时路径、重启内核\n' +
+          '- 上方可以导出 Markdown 或 ipynb，也能把它们导入回来\n' +
+          '- 把主题包 JSON 放进 `~/.xnotebook/themes/` 就会自动出现在设置里',
       ),
     ],
   };

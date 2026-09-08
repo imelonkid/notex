@@ -34,12 +34,12 @@ export function App() {
 
   /** 运行一个 cell：确保内核就绪 → 流式收集输出 → 落库 */
   const runCell = useCallback(
-    async (cellId: string) => {
+    async (cellId: string): Promise<'ok' | 'error' | 'aborted' | 'skipped'> => {
       const current = findNotebook(wsRef.current).cells.find((c) => c.id === cellId);
-      if (!current || !isCode(current)) return;
+      if (!current || !isCode(current)) return 'skipped';
       const lang = current.lang;
       const code = current.source;
-      if (runningIds[cellId]) return;
+      if (runningIds[cellId]) return 'skipped';
 
       setRunningIds((r) => ({ ...r, [cellId]: true }));
       setWs((w) => actions.setOutputs(w, cellId, [], lang, false));
@@ -52,7 +52,7 @@ export function App() {
           return next;
         });
         setWs((w) => actions.setOutputs(w, cellId, [{ type: 'missing-runtime', lang }], lang, false));
-        return;
+        return 'error';
       }
 
       const outputs: Output[] = [];
@@ -95,7 +95,7 @@ export function App() {
             return next;
           });
           setWs((w) => actions.setOutputs(w, cellId, outputs, lang, true));
-          return;
+          return 'error';
         } finally {
           setDepsStatus((d) => {
             const next = { ...d };
@@ -106,8 +106,9 @@ export function App() {
       }
 
       registry.setBusy(lang, true);
+      let status: 'ok' | 'error' | 'aborted' = 'ok';
       try {
-        await session.execute(code, {
+        status = await session.execute(code, {
           onStream: (name, text) => push({ type: 'stream', name, text }),
           onResult: (data) => push({ type: 'result', data }),
           onDisplay: (data) => push({ type: 'display', data }),
@@ -115,6 +116,7 @@ export function App() {
         });
       } catch (e) {
         push({ type: 'error', ename: 'KernelError', evalue: String(e), traceback: [] });
+        status = 'error';
       } finally {
         registry.setBusy(lang, false);
         setRunningIds((r) => {
@@ -124,13 +126,17 @@ export function App() {
         });
         setWs((w) => actions.setOutputs(w, cellId, outputs, lang, true));
       }
+      return status;
     },
     [registry, runningIds, host],
   );
 
+  // 出错或被中断就停下，避免后续 cell 在错误状态上继续跑
   const runAll = useCallback(async () => {
     for (const cell of findNotebook(wsRef.current).cells) {
-      if (isCode(cell)) await runCell(cell.id);
+      if (!isCode(cell)) continue;
+      const status = await runCell(cell.id);
+      if (status === 'error' || status === 'aborted') break;
     }
   }, [runCell]);
 
