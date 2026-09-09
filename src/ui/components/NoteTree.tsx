@@ -1,6 +1,17 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { NotebookRef } from '@core/store/index';
 import { baseOf, compareNames, dirOf, joinId } from '@core/store/paths';
+
+/** 每层缩进的像素，参考线画在上一层的位置 */
+const INDENT = 14;
+const BASE_PAD = 10;
+
+function indentStyle(depth: number): React.CSSProperties {
+  return {
+    paddingLeft: BASE_PAD + depth * INDENT,
+    ['--nx-guide' as string]: `${BASE_PAD + (depth - 1) * INDENT + 6}px`,
+  };
+}
 
 /** 自定义类型让 dragover 不必依赖 React 状态就能判断能否放置 */
 export const DRAG_MIME = 'application/x-notex-note';
@@ -16,6 +27,10 @@ interface Props {
   onToggle(dir: string): void;
   onOpen(id: string): void;
   onNoteMenu(id: string, x: number, y: number): void;
+  onRename(id: string, title: string): void;
+  /** 正在重命名的笔记，由外部控制，方便右键菜单也走同一条路径 */
+  renamingId: string | null;
+  onRenamingChange(id: string | null): void;
   onFolderMenu(dir: string, x: number, y: number): void;
   onDragStart(id: string): void;
   onDragEnd(): void;
@@ -101,13 +116,26 @@ export function NoteTree(props: Props) {
   };
 
   const renderNotes = (notes: Row[], depth: number) =>
-    notes.map((ref) => (
+    notes.map((ref) =>
+      props.renamingId === ref.id ? (
+        <RenameInput
+          key={ref.id}
+          initial={ref.title}
+          depth={depth}
+          onCommit={(next) => {
+            props.onRenamingChange(null);
+            if (next && next !== ref.title) props.onRename(ref.id, next);
+          }}
+          onCancel={() => props.onRenamingChange(null)}
+        />
+      ) : (
       <div
         key={ref.id}
         className="nx-nb-item"
         data-active={ref.id === props.activeId}
         data-ghost={ref.ghost ? 'true' : undefined}
-        style={{ paddingLeft: 10 + depth * 12 }}
+        style={indentStyle(depth)}
+        data-depth={depth}
         draggable
         onDragStart={(e) => {
           // WebKit 里不写 dataTransfer 就发不出拖拽
@@ -120,6 +148,10 @@ export function NoteTree(props: Props) {
         onDragOver={(e) => allowDrop(e, ref.dir)}
         onDrop={(e) => handleDrop(e, ref.dir)}
         onClick={() => props.onOpen(ref.id)}
+        onDoubleClick={(e) => {
+          e.preventDefault();
+          props.onRenamingChange(ref.id);
+        }}
         onContextMenu={(e) => {
           e.preventDefault();
           e.stopPropagation();
@@ -129,7 +161,8 @@ export function NoteTree(props: Props) {
       >
         <span className="nx-nb-title">{ref.title || '未命名笔记'}</span>
       </div>
-    ));
+      ),
+    );
 
   const renderFolder = (node: TreeNode, depth: number) => {
     const open = props.expanded.has(node.dir);
@@ -139,7 +172,8 @@ export function NoteTree(props: Props) {
         <div
           className="nx-folder"
           data-drop={isTarget}
-          style={{ paddingLeft: 10 + depth * 12 }}
+          style={indentStyle(depth)}
+          data-depth={depth}
           onClick={() => props.onToggle(node.dir)}
           onContextMenu={(e) => {
             e.preventDefault();
@@ -188,3 +222,55 @@ export function NoteTree(props: Props) {
 }
 
 export { joinId };
+
+/** 侧栏里的就地重命名输入框 */
+function RenameInput({
+  initial,
+  depth,
+  onCommit,
+  onCancel,
+}: {
+  initial: string;
+  depth: number;
+  onCommit(next: string): void;
+  onCancel(): void;
+}) {
+  const [value, setValue] = useState(initial);
+  const ref = useRef<HTMLInputElement>(null);
+  // 提交与取消都会卸载这个组件，用标记避免 blur 时重复触发
+  const done = useRef(false);
+
+  useEffect(() => {
+    ref.current?.focus();
+    ref.current?.select();
+  }, []);
+
+  const finish = (commit: boolean) => {
+    if (done.current) return;
+    done.current = true;
+    if (commit) onCommit(value.trim());
+    else onCancel();
+  };
+
+  return (
+    <div className="nx-nb-item" style={indentStyle(depth)} data-depth={depth}>
+      <input
+        ref={ref}
+        className="nx-rename-input"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={() => finish(true)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            finish(true);
+          } else if (e.key === 'Escape') {
+            e.preventDefault();
+            finish(false);
+          }
+        }}
+        onClick={(e) => e.stopPropagation()}
+      />
+    </div>
+  );
+}

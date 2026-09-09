@@ -172,7 +172,7 @@ export function ipynbToNotebook(text: string, fallbackTitle = '导入的笔记')
   return {
     id: uid('nb'),
     title: String(doc?.metadata?.notex?.title ?? doc?.metadata?.xnotebook?.title ?? fallbackTitle),
-    cells: cells.length ? cells : [{ id: uid('c'), type: 'md', source: '' }],
+    cells,
     counter: cells.reduce((max, c) => (c.type === 'code' ? Math.max(max, c.execN ?? 0) : max), 0),
     created: now,
     updated: now,

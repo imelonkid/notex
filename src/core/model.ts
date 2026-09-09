@@ -104,7 +104,7 @@ export function newNotebook(title = '未命名笔记'): Notebook {
     created: now,
     updated: now,
     meta: { uid: newNoteUid() },
-    cells: [newMarkdownCell('# ' + title + '\n\n双击这里开始编辑。'), newCodeCell('java', '')],
+    cells: [],
   };
 }
 

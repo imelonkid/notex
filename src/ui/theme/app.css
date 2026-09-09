@@ -1112,3 +1112,33 @@ svg.nx-out-html {
   color: var(--nx-fg-faint);
   flex: none;
 }
+
+/* 侧栏就地重命名 */
+.nx-rename-input {
+  flex: 1;
+  min-width: 0;
+  background: var(--nx-bg);
+  color: var(--nx-fg);
+  border: 1px solid var(--nx-fg);
+  border-radius: 2px;
+  padding: 1px 5px;
+  font-size: var(--nx-font-size);
+  font-family: inherit;
+  outline: none;
+}
+
+/* 层级参考线：光靠缩进不足以看清一篇笔记属于哪个目录 */
+.nx-nb-item,
+.nx-folder {
+  position: relative;
+}
+.nx-nb-item[data-depth]:not([data-depth='0'])::before,
+.nx-folder[data-depth]:not([data-depth='0'])::before {
+  content: '';
+  position: absolute;
+  left: var(--nx-guide);
+  top: 0;
+  bottom: 0;
+  border-left: 1px solid var(--nx-border);
+  pointer-events: none;
+}

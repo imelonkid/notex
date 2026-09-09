@@ -37,6 +37,8 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
   const [dragNoteId, setDragNoteId] = useState<string | null>(null);
   const [dropDir, setDropDir] = useState<string | null>(null);
   const [menu, setMenu] = useState<MenuState | null>(null);
+  /** 侧栏里正在就地重命名的笔记 */
+  const [renamingId, setRenamingId] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(
     () => localStorage.getItem('nx.sidebar.collapsed') === '1',
   );
@@ -319,13 +321,7 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
   const openNoteMenu = (id: string, x: number, y: number) => {
     const items: MenuItem[] = [
       { label: '打开', onSelect: () => void book.open(id) },
-      {
-        label: '重命名…',
-        onSelect: () => {
-          const next = window.prompt('新的笔记名', baseOf(id));
-          if (next?.trim()) void book.renameNotebook(id, next.trim());
-        },
-      },
+      { label: '重命名', onSelect: () => setRenamingId(id) },
       { label: '移动到', separatorBefore: true, children: buildMoveMenu(id) },
       {
         label: '删除笔记',
@@ -452,6 +448,9 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
               setEditingId(null);
             }}
             onNoteMenu={openNoteMenu}
+            renamingId={renamingId}
+            onRenamingChange={setRenamingId}
+            onRename={(id, title) => void book.renameNotebook(id, title)}
             onFolderMenu={openFolderMenu}
             onDragStart={setDragNoteId}
             onDragEnd={() => {

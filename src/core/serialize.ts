@@ -153,7 +153,7 @@ export function markdownToNotebook(text: string, fallbackTitle = '未命名笔�
     id: uid('nb'),
     meta,
     title: fm.title || fallbackTitle,
-    cells: cells.length ? cells : [{ id: uid('c'), type: 'md', source: '' }],
+    cells,
     counter: 0,
     created: fm.created || now,
     updated: fm.updated || now,

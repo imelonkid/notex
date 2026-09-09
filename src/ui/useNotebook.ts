@@ -467,7 +467,6 @@ export const ops = {
   },
   remove: (id: string) => (d: Notebook) => {
     d.cells = d.cells.filter((c) => c.id !== id);
-    if (!d.cells.length) d.cells.push(newMarkdownCell(''));
   },
   move: (dragId: string, targetId: string | 'end') => (d: Notebook) => {
     const from = d.cells.findIndex((c) => c.id === dragId);
