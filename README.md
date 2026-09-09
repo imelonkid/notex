@@ -1,7 +1,107 @@
+<div align="center">
+
 # NoteX
 
-本地优先的可执行笔记。Markdown 写笔记，代码 cell 可在 **Java / Python / JavaScript** 之间用 tab 切换并执行。
-UI 支持主题扩展；运行时自动识别本机环境，缺失时给出安装引导。
+**一个本地优先的可执行笔记本。用 Markdown 写，代码就在页面里跑。**
+
+Java · Python · JavaScript 三种语言，同一篇笔记里随意混用。
+笔记以纯 Markdown 存在你自己的目录里，能用 Git 管，能用任何编辑器打开。
+
+![平台](https://img.shields.io/badge/平台-macOS-1c1c1a?style=flat-square)
+![体积](https://img.shields.io/badge/安装包-4.8_MB-3f5a7d?style=flat-square)
+![内核](https://img.shields.io/badge/内核-Java_·_Python_·_JS-4b7d5b?style=flat-square)
+![存储](https://img.shields.io/badge/存储-纯_Markdown-8a6d1f?style=flat-square)
+
+</div>
+
+---
+
+## 这是什么
+
+Jupyter 很好，但它的笔记是一坨 JSON，Git 里看不了 diff，也没法用别的编辑器改。
+Obsidian 很好，但它不能跑代码。
+
+NoteX 想把这两件事合到一起：
+
+````markdown
+# 采样分布
+
+用 numpy 生成两组样本，看看形状差异。
+
+```python {id=c1}
+import numpy as np, matplotlib.pyplot as plt
+rng = np.random.default_rng(42)
+plt.hist(rng.normal(170, 7, 2000), bins=45)
+```
+````
+
+上面这段就是磁盘上 `.md` 文件的真实内容。代码块是标准的围栏块，
+在 GitHub 上能高亮，在 VS Code 里能编辑，在 NoteX 里能运行。
+
+## 特性
+
+### 三种语言，一篇笔记
+
+每个代码块左上角有 `JAVA` `PY` `JS` 三个标签，点一下就切换，源码不会丢。
+每种语言一个独立内核，变量跨代码块保留。
+
+| | 冷启动 | 中断响应 | 补全来源 |
+|---|---|---|---|
+| Java | ~0.9 s | 6 ms | JShell 语义补全 |
+| Python | ~20 ms | 1 ms | jedi，没装则 rlcompleter |
+| JavaScript | ~20 ms | 1 ms | 反射运行时上下文 |
+
+内核是三个零依赖的单文件脚本，用你本机已有的 `java` / `python3` / `node` 直接启动，
+不需要额外安装任何东西。没装某种运行环境时，运行按钮会给出对应平台的安装命令。
+
+### 真正的语义补全
+
+Java 走 JShell 的 `SourceCodeAnalysis`，在一个代码块里声明的变量，
+下一个代码块里输入 `.` 就能补出它的方法，带类型信息。这不是关键字匹配。
+
+### 图表与富输出
+
+matplotlib 的图自动显示，不需要写返回值，行为和 Jupyter 的 inline 后端一致。
+Java 的集合和映射会渲染成表格，`BufferedImage` 渲染成图片。
+
+### Java 依赖直接写在笔记里
+
+```java
+//DEPS org.apache.commons:commons-lang3:3.14.0
+
+import org.apache.commons.lang3.StringUtils;
+StringUtils.reverse("NoteX")
+```
+
+装了 Maven 就做完整的传递依赖解析，没装则直接下载显式声明的 jar。
+
+### 笔记之间可以互相引用
+
+```markdown
+[[数据分布图]]              wiki 写法，敲 [[ 会弹出补全
+[[数据分布图#箱线图]]       跳到目标笔记的某个小节
+[看看图表](数据分布图.md)   标准 Markdown 写法
+```
+
+- 指向不存在笔记的链接显示为虚线，点一下就能创建那篇笔记
+- 笔记末尾有反向链接面板，列出谁引用了这一篇
+- 外部链接交给系统浏览器，应用窗口不会被网页顶掉
+
+### 你的笔记就是你的文件
+
+```
+~/NoteX/
+├── 工作/
+│   ├── 周报.md
+│   └── 项目A/
+│       └── 设计文档.md
+├── 数据分布图.md
+└── .数据分布图.outputs.json    ← 运行结果，隐藏文件
+```
+
+Markdown 是正本，运行结果存在同目录的隐藏旁车文件里。
+在 Finder 或别的编辑器里改了文件，应用会自动读回来；
+两边同时改过则停下来问你保留哪一份，绝不静默覆盖。
 
 ## 快速开始
 
@@ -15,78 +115,91 @@ pnpm desktop
 或者在浏览器里跑：
 
 ```bash
-pnpm dev
+pnpm dev          # 打开 http://localhost:5173
 ```
-
-打开 http://localhost:5173 。首次进入会自动探测本机的 JDK、Python 和 Node。
 
 出安装包：
 
 ```bash
-pnpm desktop:build
+pnpm desktop:build   # → src-tauri/target/release/bundle/macos/NoteX.app
 ```
 
-产物在 `src-tauri/target/release/bundle/macos/NoteX.app`，约 5 MB，
-内核脚本和内置主题都打在里面。
+首次启动会自动探测本机运行时，探测顺序是：手动指定的路径、环境变量、
+`PATH`、再到 sdkman / pyenv / conda / nvm / volta 这些版本管理器的常见位置。
 
-## 笔记库
+### 运行时要求
 
-笔记以 Markdown 文件存在一个目录里，代码块就是围栏块，可以直接用 Git 管理。
-输出存成同名的隐藏旁车 JSON。
+| 语言 | 最低版本 | 说明 |
+|---|---|---|
+| Java | JDK 17 | 必须是 JDK，JRE 不含 `jdk.jshell` |
+| Python | 3.8 | 自动识别 venv 与 conda |
+| JavaScript | Node 18 | |
 
-- 默认位置是 `~/NoteX`，在设置里可以改，桌面版还能用系统目录选择器
-- 配置写在 `~/.notex/config.json`，浏览器版和桌面版共用
-- 改动防抖 500 毫秒自动写盘，⌘S 立即保存
-- 文件在应用外被改动会自动读回来；如果本地也有未保存的改动，
-  会停下来让你选择保留哪一边，不会静默覆盖
+三者都不是必需的，缺哪个只影响哪种语言的代码块。
 
-## 现状
+## 架构
 
-阶段 0 到阶段 3 的主要功能已完成：
+```mermaid
+flowchart TB
+    UI["UI 层<br/>React + CodeMirror 6<br/>只消费 design token"]
+    Core["Core 层<br/>笔记模型 · Markdown 序列化<br/>内核协议 · 链接索引<br/>（纯 TS，无 DOM 无宿主依赖）"]
+    Host["Host 层<br/>HostBridge 接口"]
+    Tauri["TauriHost<br/>桌面壳"]
+    Dev["DevServerHost<br/>开发服务器"]
+    Browser["BrowserHost<br/>纯浏览器"]
+    K1["JavaKernel.java<br/>JShell"]
+    K2["kernel.py<br/>持久 globals"]
+    K3["kernel.mjs<br/>vm context"]
 
-- Markdown cell 与代码 cell，拖拽排序、执行计数、自动保存
-- 三种语言内核，跨 cell 保留变量，stdout 流式回显，异常与编译错误结构化展示
-- 语言 tab 切换（不清空源码），tab 上叠加运行时状态点
-- 内核驱动的语义补全（Java 走 JShell，Python 优先 jedi，JS 反射上下文）
-- 中断长时间运行的 cell，三种语言均在 10 毫秒内生效且内核存活
-- 富输出：集合与映射渲染成表格，图像渲染成 PNG，始终附带纯文本兜底
-- Java 依赖注入：`//DEPS` 声明，有 Maven 就做完整传递解析
-- 运行时自动探测：手动指定 → 环境变量 → PATH → sdkman / pyenv / conda / nvm / volta
-- 缺失环境时在 cell 内展示安装引导卡片，含按平台的一键复制命令
-- 浅色 / 深色 / 跟随系统，主题包可放在 `~/.notex/themes/`
-- 导入导出 Markdown 与 ipynb，混合语言笔记可完整往返
-
-尚未完成：Tauri 桌面壳（目前通过 `pnpm dev` 在浏览器中使用）。
-
-## 目录结构
-
-```
-src/
-  core/         模型、Markdown 序列化、内核协议、运行时注册表   （纯 TS，无 DOM）
-  host/         HostBridge 接口 + 浏览器 / 开发服务器适配器
-  runtimes/     各语言的探测、启动、安装引导定义
-  ui/           React 组件、design tokens、主题、CodeMirror 集成
-server/         Vite 插件，开发期提供 spawn / exec / 文件能力
-kernels/        三个内核脚本，零依赖，用本机运行时直接启动
-themes/         主题包
-docs/           架构设计
-prototype/      最初的视觉稿（Claude Design 画布格式，仅供参考）
+    UI --> Core
+    Core --> Host
+    Host --> Tauri
+    Host --> Dev
+    Host --> Browser
+    Tauri -.JSON Lines over stdio.-> K1
+    Tauri -.-> K2
+    Tauri -.-> K3
 ```
 
-## 内核协议
+三条约束贯穿始终：
 
-JSON Lines over stdio，每条协议消息以 RS (U+001E) 开头。任何不以它开头的行都被当作漏网的 stdout，
-因此内核里意外的 `print` 不会让通信崩掉。
+1. **UI 不碰进程和文件**，只通过 Core 工作，因此能在纯浏览器里跑
+2. **Core 不依赖任何宿主**，换壳不改业务代码
+3. **内核零构建零依赖**，是源码文件而不是需要分发的二进制
+
+### 内核协议
+
+JSON Lines over stdio，每条协议消息以 RS（U+001E）开头。
+不以它开头的行一律当作漏网的 stdout，所以内核里意外的 `print` 不会让通信崩掉。
 
 ```jsonc
-// 请求
 {"id":"r1","op":"execute","code":"1 + 1"}
-{"id":"r2","op":"complete","code":"System.ou","cursor":9}
-// 响应，最后一条必为 done
-{"id":"r1","type":"stream","name":"stdout","text":"hello\n"}
 {"id":"r1","type":"result","data":{"text/plain":"2"}}
 {"id":"r1","type":"done","status":"ok","durationMs":12}
 ```
+
+单独测一个内核，不用开界面：
+
+```bash
+node kernels/test-kernel.mjs java     # 也接受 python / js
+```
+
+## 主题
+
+组件不写死任何颜色，全部走 CSS 变量。主题包是一个 JSON，只需提供想改的 token：
+
+```jsonc
+{
+  "id": "nord",
+  "name": "Nord Dark",
+  "appearance": "dark",
+  "tokens": { "bg": "#2e3440", "fg": "#eceff4", "syn-keyword": "#81a1c1" }
+}
+```
+
+放进项目的 `themes/` 或用户的 `~/.notex/themes/` 即自动加载。
+CodeMirror 的语法高亮和 Markdown 里的代码块共用同一组 `--nx-syn-*` 变量，
+所以三处配色永远一致。
 
 ## 测试
 
@@ -94,124 +207,36 @@ JSON Lines over stdio，每条协议消息以 RS (U+001E) 开头。任何不以�
 pnpm test
 ```
 
-依次跑类型检查、序列化往返、三个内核的冒烟测试与富输出测试。也可以单独跑：
+依次跑类型检查、序列化往返、链接解析、路径安全、链接索引，以及三个内核的
+冒烟测试与富输出测试。Rust 侧另有 `pnpm test:rust`。
 
-```bash
-node kernels/test-kernel.mjs java
+覆盖的都是容易出错又不容易发现的地方：Markdown 与 ipynb 的往返一致性、
+路径越界防护、危险协议拦截、跨目录的链接消歧、手写的 ISO8601 转换在闰年边界。
+
+## 目录结构
+
 ```
-
-也接受 `python` 或 `js`，检查执行、跨 cell 状态、异常、编译错误、补全、中断、错误后恢复。
-`node kernels/test-rich.mjs all` 单独检查富输出。
-
-## Java 依赖
-
-在 Java cell 顶部用 JBang 风格的注释声明，运行前会自动解析并注入类路径：
-
-```java
-//DEPS org.apache.commons:commons-lang3:3.14.0
-//DEPS com.google.guava:guava:33.0.0-jre
-
-import org.apache.commons.lang3.StringUtils;
-StringUtils.reverse("NoteX")
+src/
+  core/         模型 · Markdown 序列化 · 内核协议 · 链接索引 · 运行时注册表
+  host/         HostBridge 接口 + 三个宿主适配器
+  runtimes/     各语言的探测、启动、安装引导
+  ui/           React 组件 · design token · 主题 · CodeMirror 集成
+server/         Vite 插件，开发期提供 spawn / exec / 文件能力
+kernels/        三个内核脚本，零依赖
+src-tauri/      桌面壳，文件与进程能力的 Rust 实现
+themes/         主题包
+docs/           架构设计与方案
 ```
-
-装了 Maven 就用它做完整的传递依赖解析；没装则只下载显式声明的 jar，
-并在输出里说明不含传递依赖。下载的 jar 缓存在 `~/.notex/deps/`。
-
-## 运行时要求
-
-| 语言 | 最低版本 | 说明 |
-|---|---|---|
-| Java | JDK 17 | 必须是 JDK，JRE 不含 `jdk.jshell` 模块 |
-| Python | 3.8 | 装了 `jedi` 补全更准；自动识别 venv 和 conda |
-| JavaScript | Node 18 | |
-
-三者都不是必需的，缺哪个就只影响哪个语言的 cell。
-
-## 主题
-
-主题包是一个 JSON，只需提供想改的 token：
-
-```jsonc
-{
-  "id": "solarized",
-  "name": "Solarized Light",
-  "appearance": "light",
-  "tokens": { "bg": "#fdf6e3", "fg": "#657b83", "syn-keyword": "#859900" },
-  "fonts": { "heading": "'Iowan Old Style', serif" }
-}
-```
-
-放进项目的 `themes/` 或用户的 `~/.notex/themes/` 即被自动加载，在设置里切换。
-两处同 id 时用户目录优先。主题包可以附带一个 CSS 文件，在 `css` 字段里写文件名。组件不写死任何颜色，
-CodeMirror 高亮与 Markdown 代码块共用同一组 `--nx-syn-*` 变量，三处配色永远一致。
-
-## Python 绘图
-
-matplotlib 的图会自动显示，不需要写返回值，行为和 Jupyter 的 inline 后端一致：
-
-```python
-import matplotlib.pyplot as plt
-plt.plot([1, 4, 9, 16])
-```
-
-内核在用户代码之前把 `MPLBACKEND` 锁成 `Agg`，所以不会弹出绘图窗口，
-在 macOS 上也不会抢焦点。把 figure 作为末尾表达式返回同样能出图。
-
-画中文标签需要指定含中文字形的字体，否则显示成方框：
-
-```python
-plt.rcParams["font.sans-serif"] = ["PingFang SC", "Heiti SC", "Arial Unicode MS"]
-plt.rcParams["axes.unicode_minus"] = False
-```
-
-## 笔记之间的链接
-
-两种写法都支持，点击在应用内跳转，不会跳出去：
-
-```markdown
-[[数据分布图]]              wiki 写法
-[[数据分布图|换个显示文字]]
-[[数据分布图#箱线图]]       跳到目标笔记的某个小节
-[看看图表](数据分布图.md)   标准 Markdown 写法
-```
-
-- 编辑文本时敲 `[[` 弹出笔记补全，方向键选择，回车插入
-- 解析顺序：相对当前目录、相对库根、按名字且同名优先同目录
-- 指向不存在笔记的链接显示为虚线灰字，点击可直接创建那篇笔记
-- 笔记末尾有反向链接面板，列出引用了这一篇的其它笔记
-
-外部链接交给系统浏览器打开。只放行 http、https、mailto，
-其余协议一律拦截，因为笔记内容可能来自导入。
-
-## Markdown cell 的编辑
-
-- **双击**正文进入编辑框，编辑态只有编辑框，没有并排预览
-- **Shift+Enter** 或 **Esc** 回到预览
-- 焦点移到页面上别的地方也会自动回到预览
-- 切换到别的应用不会退出编辑，回来时还在原处
-
-## 布局与快捷键
-
-- `⌘B` / `Ctrl+B` 折叠或展开左侧栏，状态记在本地
-- 内容区宽度、页面留白、左侧装订线宽度都是 token，可在主题包里覆盖：
-  `content-width`、`page-pad-x`（左）、`page-pad-right`（右）、
-  `page-pad-top`、`gutter-width`
-
-## 关于 Java 的两个进程
-
-运行 Java 时会看到两个 `java` 进程，这是 JShell 的设计：一个是内核本身，
-负责编译与消息转发；另一个是隔离的执行 JVM，用户代码跑在里面。
-正因为隔离，死循环才能被中断，用户代码也无法把内核搞崩。
-
-两个进程都带了 `-Dapple.awt.UIElement=true`，在 macOS 上不会弹出 Dock 图标，
-也不会抢走当前窗口的焦点。内核进程另外带 `-Djava.awt.headless=true`。
 
 ## 已知限制
 
+- 目前只在 macOS 上验证过。Windows 的信号语义不同，中断需要另做适配。
 - 三个内核相互独立，不共享变量。这是刻意的简化。
 - 不支持标准输入，`Scanner` 和 `input()` 会挂起。
-- Windows 上信号语义不同，中断目前只在 macOS 和 Linux 验证过。
-- Markdown 是正本，输出存在旁车 JSON 里；目前导入 Markdown 不会自动带回输出。
+- 一种语言只能同时用一个版本，多版本切换尚未实现。
+- 目录层级限制为三级。
 
-后续计划见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) 第 8 节。
+## 设计文档
+
+- [架构设计](docs/ARCHITECTURE.md)
+- [目录与超链方案](docs/PROPOSAL-目录与超链.md)
