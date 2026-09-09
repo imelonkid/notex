@@ -281,6 +281,7 @@ button {
 
 /* Cell */
 .nx-cell {
+  position: relative;
   display: grid;
   grid-template-columns: var(--nx-gutter-width) minmax(0, 1fr);
   gap: 0 10px;
@@ -328,6 +329,28 @@ button {
   margin-bottom: 7px;
   flex-wrap: wrap;
 }
+/* 预览态的文本 cell 没有常驻控件，操作栏浮在右上角，不占纵向空间 */
+.nx-cell-bar[data-floating='true'] {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  margin-bottom: 0;
+  z-index: 2;
+  background: var(--nx-bg);
+  border-radius: var(--nx-radius-sm);
+}
+
+/* 次要操作悬停才出现，正文读起来更干净 */
+.nx-cell-actions {
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.nx-cell:hover .nx-cell-actions,
+.nx-cell-actions:focus-within {
+  opacity: 1;
+}
 
 /* 语言切换 tab */
 .nx-langtabs {
@@ -360,16 +383,6 @@ button {
 .nx-langtab .nx-dot {
   width: 5px;
   height: 5px;
-}
-
-.nx-badge {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  color: var(--nx-fg-muted);
-  border: 1px solid var(--nx-border);
-  padding: 3px 10px;
-  border-radius: var(--nx-radius-sm);
 }
 
 .nx-btn-run {

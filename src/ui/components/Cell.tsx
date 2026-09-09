@@ -130,7 +130,7 @@ export function Cell(props: Props) {
         </div>
 
         <div style={{ minWidth: 0 }}>
-          <div className="nx-cell-bar">
+          <div className="nx-cell-bar" data-floating={!isCode && !editing}>
             {isCode ? (
               <>
                 <LangTabs current={cell.lang} onPick={props.onLang} />
@@ -145,41 +145,32 @@ export function Cell(props: Props) {
                 )}
               </>
             ) : (
-              <>
-                <span className="nx-badge">MARKDOWN</span>
-                {editing ? (
-                  <button
-                    className="nx-btn-primary"
-                    style={{ fontSize: '11.5px', padding: '3px 14px' }}
-                    // onMouseDown 抢在 textarea 的 blur 之前，避免按钮被重排后点空
-                    onMouseDown={(e) => {
-                      e.preventDefault();
-                      commitAndPreview();
-                    }}
-                  >
-                    预览
-                  </button>
-                ) : (
-                  <button
-                    className="nx-btn-mini"
-                    style={{ border: '1px solid var(--nx-border-strong)' }}
-                    onClick={enterEdit}
-                  >
-                    编辑
-                  </button>
-                )}
-              </>
+              editing && (
+                <button
+                  className="nx-btn-primary"
+                  style={{ fontSize: '11.5px', padding: '3px 14px' }}
+                  // onMouseDown 抢在 textarea 的 blur 之前，避免按钮被重排后点空
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    commitAndPreview();
+                  }}
+                >
+                  预览
+                </button>
+              )
             )}
             <span style={{ flex: 1 }} />
-            <button className="nx-btn-mini" title="在下方插入文本" onClick={() => props.onInsert('md')}>
-              ＋文本
-            </button>
-            <button className="nx-btn-mini" title="在下方插入代码" onClick={() => props.onInsert('code')}>
-              ＋代码
-            </button>
-            <button className="nx-btn-mini" data-danger="true" title="删除此 cell" onClick={props.onRemove}>
-              ×
-            </button>
+            <div className="nx-cell-actions">
+              <button className="nx-btn-mini" title="在下方插入文本" onClick={() => props.onInsert('md')}>
+                ＋文本
+              </button>
+              <button className="nx-btn-mini" title="在下方插入代码" onClick={() => props.onInsert('code')}>
+                ＋代码
+              </button>
+              <button className="nx-btn-mini" data-danger="true" title="删除此 cell" onClick={props.onRemove}>
+                ×
+              </button>
+            </div>
           </div>
 
           {isCode ? (
