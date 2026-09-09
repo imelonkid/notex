@@ -13,36 +13,48 @@ import { openStore, type StoreSetup } from './core/store/index';
  * 加载主题包。优先问宿主，它会合并内置 themes/ 与用户 ~/.notex/themes/；
  * 纯浏览器模式下退回打包进来的内置主题。
  */
-function ThemeLoader({ children }: { children: React.ReactNode }) {
+function ThemeLoader({ host, children }: { host: HostBridge | null; children: React.ReactNode }) {
   const { registerPack } = useTheme();
 
   useEffect(() => {
     let cancelled = false;
+    const add = (pack: ThemePack) => !cancelled && registerPack(pack);
 
+    // 内置主题打包进了 JS，任何宿主下都可用
     const loadBundled = () => {
       const modules = import.meta.glob<{ default: ThemePack }>('../themes/*.json');
-      for (const load of Object.values(modules)) {
-        void load().then((m) => !cancelled && registerPack(m.default));
+      for (const load of Object.values(modules)) void load().then((m) => add(m.default));
+    };
+
+    // 用户放在 ~/.notex/themes 里的主题，需要文件能力
+    const loadUserThemes = async () => {
+      if (!host) return;
+      try {
+        const dir = host.joinPath(await host.homeDir(), '.notex', 'themes');
+        for (const entry of await host.listDir(dir)) {
+          if (entry.isDir || !entry.name.endsWith('.json')) continue;
+          try {
+            const pack = JSON.parse(await host.readText(host.joinPath(dir, entry.name))) as ThemePack;
+            if (typeof pack.css === 'string' && !pack.css.includes('{')) {
+              pack.css = await host.readText(host.joinPath(dir, pack.css)).catch(() => '');
+            }
+            if (pack.id) add(pack);
+          } catch {
+            // 单个主题坏了不影响其它
+          }
+        }
+      } catch {
+        // 目录不存在是常态
       }
     };
 
-    void (async () => {
-      try {
-        const res = await fetch('/__host/themes');
-        if (!res.ok) throw new Error(String(res.status));
-        const { packs } = (await res.json()) as { packs: ThemePack[] };
-        if (cancelled) return;
-        if (packs.length) packs.forEach(registerPack);
-        else loadBundled();
-      } catch {
-        loadBundled();
-      }
-    })();
+    loadBundled();
+    void loadUserThemes();
 
     return () => {
       cancelled = true;
     };
-  }, [registerPack]);
+  }, [registerPack, host]);
 
   return <>{children}</>;
 }
@@ -69,20 +81,24 @@ function Boot() {
 
   if (!host || !setup) {
     return (
-      <div style={{ padding: 40, color: 'var(--nx-fg-faint)', fontSize: 13 }}>
-        {host ? '正在打开笔记库…' : '正在连接宿主…'}
-      </div>
+      <ThemeLoader host={host}>
+        <div style={{ padding: 40, color: 'var(--nx-fg-faint)', fontSize: 13 }}>
+          {host ? '正在打开笔记库…' : '正在连接宿主…'}
+        </div>
+      </ThemeLoader>
     );
   }
 
   return (
-    <RuntimeProvider host={host}>
-      <App
-        key={setup.vaultPath || 'local'}
-        setup={setup}
-        onVaultChanged={() => setReloadKey((k) => k + 1)}
-      />
-    </RuntimeProvider>
+    <ThemeLoader host={host}>
+      <RuntimeProvider host={host}>
+        <App
+          key={setup.vaultPath || 'local'}
+          setup={setup}
+          onVaultChanged={() => setReloadKey((k) => k + 1)}
+        />
+      </RuntimeProvider>
+    </ThemeLoader>
   );
 }
 
@@ -125,9 +141,7 @@ const root = (window.__xnbRoot ??= createRoot(container));
 root.render(
   <StrictMode>
     <ThemeProvider>
-      <ThemeLoader>
-        <Boot />
-      </ThemeLoader>
+      <Boot />
     </ThemeProvider>
   </StrictMode>,
 );

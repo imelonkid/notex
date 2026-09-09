@@ -5,12 +5,40 @@ UI 支持主题扩展；运行时自动识别本机环境，缺失时给出安�
 
 ## 快速开始
 
+桌面应用：
+
 ```bash
 pnpm install
+pnpm desktop
+```
+
+或者在浏览器里跑：
+
+```bash
 pnpm dev
 ```
 
 打开 http://localhost:5173 。首次进入会自动探测本机的 JDK、Python 和 Node。
+
+出安装包：
+
+```bash
+pnpm desktop:build
+```
+
+产物在 `src-tauri/target/release/bundle/macos/NoteX.app`，约 5 MB，
+内核脚本和内置主题都打在里面。
+
+## 笔记库
+
+笔记以 Markdown 文件存在一个目录里，代码块就是围栏块，可以直接用 Git 管理。
+输出存成同名的隐藏旁车 JSON。
+
+- 默认位置是 `~/NoteX`，在设置里可以改，桌面版还能用系统目录选择器
+- 配置写在 `~/.notex/config.json`，浏览器版和桌面版共用
+- 改动防抖 500 毫秒自动写盘，⌘S 立即保存
+- 文件在应用外被改动会自动读回来；如果本地也有未保存的改动，
+  会停下来让你选择保留哪一边，不会静默覆盖
 
 ## 现状
 

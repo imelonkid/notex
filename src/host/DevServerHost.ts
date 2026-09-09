@@ -1,3 +1,4 @@
+import { resolveDepsWithHost } from '@core/deps/resolve';
 import {
   type ChildProcess,
   type ExecResult,
@@ -151,9 +152,8 @@ export class DevServerHost implements HostBridge {
   }
 
   async resolveDeps(coords: string[]): Promise<ResolvedDeps> {
-    const r = await postJson<ResolvedDeps & { error?: string }>('/deps', { coords });
-    if (r.error) throw new Error(r.error);
-    return r;
+    // 与桌面壳共用同一份实现，只依赖 exec 与文件读写
+    return await resolveDepsWithHost(this, coords);
   }
 
   async readText(path: string): Promise<string> {
@@ -206,9 +206,14 @@ export class DevServerHost implements HostBridge {
   }
 }
 
+/** 桌面壳 → 开发服务器 → 纯浏览器，依次尝试 */
 export async function detectHost(): Promise<HostBridge> {
+  const { TauriHost } = await import('./TauriHost');
+  if (TauriHost.isAvailable()) return await TauriHost.create();
+
   const dev = await DevServerHost.probe();
   if (dev) return dev;
+
   const { BrowserHost } = await import('./BrowserHost');
   return new BrowserHost();
 }
