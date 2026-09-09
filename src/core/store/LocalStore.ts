@@ -1,5 +1,5 @@
 import { type Notebook, type Workspace, newNotebook } from '../model';
-import { loadWorkspace, saveWorkspace } from '../store';
+import { hasStoredWorkspace, loadWorkspace, saveWorkspace } from '../store';
 import type { NotebookRef, NotebookStore } from './types';
 
 /**
@@ -58,7 +58,8 @@ export class LocalStore implements NotebookStore {
     return this.ws.notebooks;
   }
 
+  /** 真的存过数据，而不是 loadWorkspace 兜底给出的种子 */
   hasData(): boolean {
-    return this.ws.notebooks.length > 0;
+    return hasStoredWorkspace() && this.ws.notebooks.length > 0;
   }
 }

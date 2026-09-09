@@ -102,6 +102,19 @@ function seed(): Workspace {
   return { activeId: nb.id, notebooks: [nb] };
 }
 
+/**
+ * localStorage 里是否真的存过工作区。
+ * loadWorkspace 在没有数据时会返回种子，迁移必须区分这两种情况，
+ * 否则新装的客户端会把种子笔记写进 vault。
+ */
+export function hasStoredWorkspace(): boolean {
+  try {
+    return localStorage.getItem(KEY) !== null;
+  } catch {
+    return false;
+  }
+}
+
 export function loadWorkspace(): Workspace {
   try {
     const raw = localStorage.getItem(KEY);

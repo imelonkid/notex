@@ -39,6 +39,10 @@ export function SettingsModal({ setup, onVaultChanged, onClose }: Props) {
     void defaultVault(host).then(setVaultDefault).catch(() => setVaultDefault(''));
   }, [host]);
 
+  // 输入框与当前生效值不一致时才显示"应用"，避免误触发重载
+  const currentVaultValue = setup.isDefaultVault ? '' : setup.vaultPath;
+  const vaultDirty = setup.store.kind === 'vault' && vaultInput.trim() !== currentVaultValue;
+
   const applyVault = async (next: string | null) => {
     setVaultBusy(true);
     setVaultError(null);
@@ -89,7 +93,7 @@ export function SettingsModal({ setup, onVaultChanged, onClose }: Props) {
           <div className="nx-field-label">笔记库</div>
           {setup.store.kind === 'vault' ? (
             <>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <div className="nx-input-row">
                 <input
                   className="nx-text-input"
                   placeholder={vaultDefault ? `默认：${vaultDefault}` : '留空使用默认位置'}
@@ -102,30 +106,11 @@ export function SettingsModal({ setup, onVaultChanged, onClose }: Props) {
                     浏览…
                   </button>
                 )}
-                <button
-                  className="nx-btn-mini"
-                  onClick={() => void applyVault(vaultInput || null)}
-                  disabled={vaultBusy}
-                >
-                  {vaultBusy ? '切换中…' : '应用'}
-                </button>
               </div>
               <div className="nx-runtime-detail">
                 当前：{setup.vaultPath}
                 {setup.isDefaultVault ? '（默认位置）' : ''}
               </div>
-              {!setup.isDefaultVault && (
-                <button
-                  className="nx-btn-mini"
-                  style={{ marginTop: 6, marginLeft: -8 }}
-                  onClick={() => {
-                    setVaultInput('');
-                    void applyVault(null);
-                  }}
-                >
-                  恢复默认位置
-                </button>
-              )}
               {vaultError && (
                 <div className="nx-runtime-detail" style={{ color: 'var(--nx-danger)' }}>
                   {vaultError}
@@ -221,7 +206,29 @@ export function SettingsModal({ setup, onVaultChanged, onClose }: Props) {
           })}
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <div className="nx-modal-footer">
+          {setup.store.kind === 'vault' && !setup.isDefaultVault && (
+            <button
+              className="nx-btn-ghost"
+              onClick={() => {
+                setVaultInput('');
+                void applyVault(null);
+              }}
+              disabled={vaultBusy}
+            >
+              恢复默认位置
+            </button>
+          )}
+          <span style={{ flex: 1 }} />
+          {vaultDirty && (
+            <button
+              className="nx-btn-outline"
+              onClick={() => void applyVault(vaultInput || null)}
+              disabled={vaultBusy}
+            >
+              {vaultBusy ? '切换中…' : '应用笔记库'}
+            </button>
+          )}
           <button className="nx-btn-primary" onClick={onClose}>
             关闭
           </button>
