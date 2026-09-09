@@ -26,7 +26,7 @@ function seed(): Workspace {
       newMarkdownCell(
         '# 欢迎使用 NoteX\n\n' +
           '文本用 Markdown 书写，代码直接在页面里运行。点代码块上的**运行**试试。\n\n' +
-          '- 双击文本 cell 进入编辑，`Shift+Enter` 完成\n' +
+          '- 双击文本 cell 进入编辑，`Shift+Enter` 回到预览，点开别处也会自动预览\n' +
           '- 代码 cell 里 `Shift+Enter` 运行，运行中按**中断**可以停下来\n' +
           '- 用左上角的 tab 切换 **Java / Python / JS**，源码不会丢失\n' +
           '- 输入时会调用对应内核做补全，`Ctrl+Space` 强制触发\n' +

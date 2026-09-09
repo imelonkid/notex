@@ -300,7 +300,7 @@ export function App() {
               导入…
             </button>
             <span style={{ flex: 1 }} />
-            <span className="nx-hint">Shift+Enter 运行 · 双击文本编辑 · 拖 ⠿ 排序</span>
+            <span className="nx-hint">Shift+Enter 运行/预览 · 双击文本编辑 · 拖 ⠿ 排序</span>
           </div>
 
           {nb.cells.map((cell, i) => (

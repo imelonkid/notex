@@ -305,7 +305,7 @@ button {
   user-select: none;
   line-height: 1;
 }
-.notex-execn {
+.nx-execn {
   font-family: var(--nx-font-mono);
   font-size: 11px;
   color: var(--nx-fg-faint);

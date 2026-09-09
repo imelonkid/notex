@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { marked } from 'marked';
 import { LANGS, type Cell as CellModel, type LangId } from '@core/model';
 import { CodeEditor } from '../editor/CodeEditor';
@@ -81,11 +81,23 @@ export function Cell(props: Props) {
   const { cell, editing, running, busyNote, showExecN, dropActive } = props;
   const { registry } = useRuntimes();
   const [mdDraft, setMdDraft] = useState(cell.source);
+  const mdRef = useRef<HTMLTextAreaElement>(null);
 
+  // 编辑态只显示编辑框，预览态才渲染，因此始终用已提交的 source
   const html = useMemo(
-    () => renderMarkdown(cell.type === 'md' ? (editing ? mdDraft : cell.source) : ''),
-    [cell.type, cell.source, mdDraft, editing],
+    () => renderMarkdown(cell.type === 'md' ? cell.source : ''),
+    [cell.type, cell.source],
   );
+
+  const enterEdit = () => {
+    setMdDraft(cell.source);
+    props.onEdit();
+  };
+
+  const commitAndPreview = () => {
+    props.onSource(mdDraft);
+    props.onDoneEdit();
+  };
 
   const isCode = cell.type === 'code';
   const badge = running ? '[*]' : cell.type === 'code' && cell.execN ? `[${cell.execN}]` : '[ ]';
@@ -114,7 +126,7 @@ export function Cell(props: Props) {
           >
             ⠿
           </span>
-          {isCode && showExecN && <span className="notex-execn">{badge}</span>}
+          {isCode && showExecN && <span className="nx-execn">{badge}</span>}
         </div>
 
         <div style={{ minWidth: 0 }}>
@@ -139,21 +151,19 @@ export function Cell(props: Props) {
                   <button
                     className="nx-btn-primary"
                     style={{ fontSize: '11.5px', padding: '3px 14px' }}
-                    onClick={() => {
-                      props.onSource(mdDraft);
-                      props.onDoneEdit();
+                    // onMouseDown 抢在 textarea 的 blur 之前，避免按钮被重排后点空
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      commitAndPreview();
                     }}
                   >
-                    完成
+                    预览
                   </button>
                 ) : (
                   <button
                     className="nx-btn-mini"
                     style={{ border: '1px solid var(--nx-border-strong)' }}
-                    onClick={() => {
-                      setMdDraft(cell.source);
-                      props.onEdit();
-                    }}
+                    onClick={enterEdit}
                   >
                     编辑
                   </button>
@@ -198,41 +208,37 @@ export function Cell(props: Props) {
               )}
             </>
           ) : editing ? (
-            <>
-              <textarea
-                className="nx-md-editor"
-                autoFocus
-                value={mdDraft}
-                rows={Math.max(3, mdDraft.split('\n').length + 1)}
-                spellCheck={false}
-                onChange={(e) => {
-                  setMdDraft(e.target.value);
-                  props.onSource(e.target.value);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && e.shiftKey) {
-                    e.preventDefault();
-                    props.onSource(mdDraft);
-                    props.onDoneEdit();
-                  }
-                }}
-              />
-              <div style={{ fontSize: '11px', color: 'var(--nx-fg-faint)', margin: '8px 2px 4px' }}>
-                实时预览 · Shift+Enter 完成
-              </div>
-              <div
-                className="nx-md"
-                dangerouslySetInnerHTML={{ __html: html }}
-                style={{ padding: '2px 0 2px 14px', borderLeft: '2px solid var(--nx-border)' }}
-              />
-            </>
+            <textarea
+              className="nx-md-editor"
+              autoFocus
+              value={mdDraft}
+              rows={Math.max(3, mdDraft.split('\n').length + 1)}
+              spellCheck={false}
+              placeholder="用 Markdown 书写…  Shift+Enter 预览，点开别处也会自动预览"
+              onChange={(e) => {
+                setMdDraft(e.target.value);
+                props.onSource(e.target.value);
+              }}
+              onKeyDown={(e) => {
+                if ((e.key === 'Enter' && e.shiftKey) || e.key === 'Escape') {
+                  e.preventDefault();
+                  commitAndPreview();
+                }
+              }}
+              ref={mdRef}
+              onBlur={() => {
+                // 切换到别的应用也会触发 blur，但那时 activeElement 仍是本编辑框。
+                // 只有焦点真的落到页面里别的元素上，才回到预览。
+                setTimeout(() => {
+                  if (document.activeElement === mdRef.current) return;
+                  commitAndPreview();
+                }, 0);
+              }}
+            />
           ) : (
             <div
               className="nx-md"
-              onDoubleClick={() => {
-                setMdDraft(cell.source);
-                props.onEdit();
-              }}
+              onDoubleClick={enterEdit}
               dangerouslySetInnerHTML={{ __html: html }}
               style={{ padding: '2px 0', cursor: 'text' }}
             />
