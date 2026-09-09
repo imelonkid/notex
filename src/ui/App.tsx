@@ -267,8 +267,6 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
   };
 
   const nb = book.nb;
-  // 新建笔记与文件夹落在当前笔记所在的目录
-  const currentDir = book.activeId ? dirOf(book.activeId) : '';
 
   /**
    * 「移动到」按目录层级做成多级子菜单，而不是把 "工作/项目A" 这种
@@ -461,25 +459,6 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
           />
         </div>
 
-        <div className="nx-sidebar-actions">
-          <button
-            className="nx-btn-outline"
-            onClick={() => void book.createNotebook('未命名笔记', currentDir)}
-          >
-            ＋ 笔记
-          </button>
-          <button
-            className="nx-btn-outline"
-            onClick={() => {
-              const name = window.prompt('新文件夹名称', '新文件夹');
-              if (name?.trim()) void book.createFolder(joinId(currentDir, name.trim()));
-            }}
-          >
-            ＋ 文件夹
-          </button>
-        </div>
-
-        <div style={{ flex: 1 }} />
 
         <div className="nx-runtime-panel">
           <button

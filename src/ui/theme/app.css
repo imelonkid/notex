@@ -744,9 +744,11 @@ svg.nx-out-html {
 }
 
 /* 笔记列表与提示条 */
+/* 占满剩余高度，空白处右键也能新建 */
 .nx-nb-list {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
-  max-height: 46vh;
   margin: 0 -4px;
   padding: 0 4px;
 }
@@ -873,7 +875,8 @@ svg.nx-out-html {
 
 /* 目录树 */
 .nx-tree {
-  min-height: 40px;
+  /* 撑满列表区，这样列表下方的空白也接收右键 */
+  min-height: 100%;
 }
 .nx-tree[data-drop='true'] {
   outline: 1px dashed var(--nx-border-strong);
@@ -917,17 +920,6 @@ svg.nx-out-html {
   flex: none;
 }
 
-.nx-sidebar-actions {
-  display: flex;
-  gap: 6px;
-  margin-top: 12px;
-}
-.nx-sidebar-actions .nx-btn-outline {
-  flex: 1;
-  padding: 7px 8px;
-  font-size: 12.5px;
-  white-space: nowrap;
-}
 
 /* 右键菜单 */
 .nx-menu {
