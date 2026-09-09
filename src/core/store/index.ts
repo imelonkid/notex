@@ -4,7 +4,7 @@ import { LocalStore } from './LocalStore';
 import { VaultStore } from './VaultStore';
 import type { NotebookStore } from './types';
 
-export type { NotebookRef, NotebookStore } from './types';
+export type { NotebookRef, NotebookStore, VaultListing } from './types';
 export { VaultStore } from './VaultStore';
 export { LocalStore } from './LocalStore';
 

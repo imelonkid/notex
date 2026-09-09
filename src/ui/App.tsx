@@ -3,8 +3,10 @@ import { LANGS, isCode, type LangId, type Output } from '@core/model';
 import { exportIpynb, exportMarkdown, importNotebook } from '@core/files';
 import { parseDeps } from '@core/deps';
 import { resolveNoteLink } from '@core/links';
+import { dirOf, joinId } from '@core/store/paths';
 import type { StoreSetup } from '@core/store/index';
 import { Cell } from './components/Cell';
+import { NoteTree } from './components/NoteTree';
 import { SettingsModal } from './components/SettingsModal';
 import { useRuntimes } from './RuntimeContext';
 import { scrollToHeadingText, useLinkInterceptor } from './useLinkInterceptor';
@@ -21,6 +23,16 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [depsStatus, setDepsStatus] = useState<Record<string, string>>({});
   const [refreshing, setRefreshing] = useState(false);
+  const [expanded, setExpanded] = useState<Set<string>>(() => {
+    try {
+      const raw = localStorage.getItem(`nx.tree.expanded.${setup.vaultPath}`);
+      return new Set<string>(raw ? (JSON.parse(raw) as string[]) : []);
+    } catch {
+      return new Set<string>();
+    }
+  });
+  const [dragNoteId, setDragNoteId] = useState<string | null>(null);
+  const [dropDir, setDropDir] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(
     () => localStorage.getItem('nx.sidebar.collapsed') === '1',
   );
@@ -40,7 +52,11 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
   const openInternalLink = useCallback(
     (target: string, hash?: string) => {
       // 只写了 #小节 的情况已在拦截器里当锚点处理，这里一定有 target
-      const id = resolveNoteLink(target, refsRef.current);
+      const id = resolveNoteLink(
+        target,
+        refsRef.current,
+        activeIdRef.current ? dirOf(activeIdRef.current) : '',
+      );
       if (!id) {
         setLinkNotice(`找不到这篇笔记：${target}`);
         return;
@@ -82,6 +98,33 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
   useEffect(() => {
     localStorage.setItem('nx.sidebar.collapsed', sidebarCollapsed ? '1' : '0');
   }, [sidebarCollapsed]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        `nx.tree.expanded.${setup.vaultPath}`,
+        JSON.stringify([...expanded]),
+      );
+    } catch {
+      /* 无痕模式忽略 */
+    }
+  }, [expanded, setup.vaultPath]);
+
+  // 当前笔记所在的各级目录自动展开，否则跳转过去看不到选中项
+  useEffect(() => {
+    if (!book.activeId) return;
+    const parts = dirOf(book.activeId).split('/').filter(Boolean);
+    if (!parts.length) return;
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      let acc = '';
+      for (const p of parts) {
+        acc = acc ? `${acc}/${p}` : p;
+        next.add(acc);
+      }
+      return next;
+    });
+  }, [book.activeId]);
 
   // Cmd/Ctrl+B 切换侧栏，Cmd/Ctrl+S 立即保存
   useEffect(() => {
@@ -222,6 +265,8 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
   };
 
   const nb = book.nb;
+  // 新建笔记与文件夹落在当前笔记所在的目录
+  const currentDir = book.activeId ? dirOf(book.activeId) : '';
   const anyRunning = Object.keys(runningIds).length > 0;
   void revision;
 
@@ -282,38 +327,57 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
           </button>
         </div>
         <div className="nx-nb-list">
-          {book.refs.map((ref) => (
-            <div
-              key={ref.id}
-              className="nx-nb-item"
-              data-active={ref.id === book.activeId}
-              onClick={() => {
-                void book.open(ref.id);
-                setEditingId(null);
-              }}
-            >
-              <span className="nx-nb-title">{ref.title || '未命名笔记'}</span>
-              <button
-                className="nx-nb-remove"
-                title="删除笔记"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  void book.removeNotebook(ref.id);
-                }}
-              >
-                ×
-              </button>
-            </div>
-          ))}
+          <NoteTree
+            notes={book.refs}
+            folders={book.folders}
+            activeId={book.activeId}
+            expanded={expanded}
+            dragId={dragNoteId}
+            dropDir={dropDir}
+            onToggle={(dir) =>
+              setExpanded((prev) => {
+                const next = new Set(prev);
+                if (next.has(dir)) next.delete(dir);
+                else next.add(dir);
+                return next;
+              })
+            }
+            onOpen={(id) => {
+              void book.open(id);
+              setEditingId(null);
+            }}
+            onRemove={(id) => void book.removeNotebook(id)}
+            onDragStart={setDragNoteId}
+            onDragEnd={() => {
+              setDragNoteId(null);
+              setDropDir(null);
+            }}
+            onDragOverDir={setDropDir}
+            onDropTo={(dir) => {
+              if (dragNoteId) void book.moveNotebook(dragNoteId, dir);
+              setDragNoteId(null);
+              setDropDir(null);
+            }}
+          />
         </div>
 
-        <button
-          className="nx-btn-outline"
-          style={{ marginTop: 12 }}
-          onClick={() => void book.createNotebook('未命名笔记')}
-        >
-          ＋ 新建笔记本
-        </button>
+        <div className="nx-sidebar-actions">
+          <button
+            className="nx-btn-outline"
+            onClick={() => void book.createNotebook('未命名笔记', currentDir)}
+          >
+            ＋ 笔记
+          </button>
+          <button
+            className="nx-btn-outline"
+            onClick={() => {
+              const name = window.prompt('新文件夹名称', '新文件夹');
+              if (name?.trim()) void book.createFolder(joinId(currentDir, name.trim()));
+            }}
+          >
+            ＋ 文件夹
+          </button>
+        </div>
 
         <div style={{ flex: 1 }} />
 

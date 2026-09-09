@@ -84,36 +84,62 @@ export function headingSlug(text: string): string {
     .replace(/[^\p{L}\p{N}_-]/gu, '');
 }
 
-/** 供解析用的笔记条目，只需要 id 和标题 */
+/** 供解析用的笔记条目 */
 export interface LinkTarget {
   id: string;
   title: string;
+  /** 所在目录，用于同名笔记的消歧 */
+  dir?: string;
 }
 
 /**
  * 把站内链接的写法解析成笔记 id。
  *
- * 依次尝试：原样、去掉 .md、去掉 ./ 前缀、忽略大小写匹配标题。
+ * 有了目录之后按这个顺序找：
+ * 1. 相对当前笔记所在目录的路径
+ * 2. 相对笔记库根的路径
+ * 3. 按名字匹配，同名时优先同目录的那个
+ * 4. 忽略大小写再试一遍
+ *
  * 找不到返回 null，由调用方提示断链，而不是跳到一篇不相干的笔记。
  */
-export function resolveNoteLink(target: string, notes: LinkTarget[]): string | null {
+export function resolveNoteLink(
+  target: string,
+  notes: LinkTarget[],
+  fromDir = '',
+): string | null {
   const cleaned = target
     .trim()
     .replace(/^\.\//, '')
     .replace(/\.md$/i, '');
   if (!cleaned) return null;
 
+  // 1. 相对当前目录
+  if (fromDir) {
+    const relative = `${fromDir}/${cleaned}`;
+    const hit = notes.find((n) => n.id === relative);
+    if (hit) return hit.id;
+  }
+
+  // 2. 相对笔记库根
   const exact = notes.find((n) => n.id === cleaned);
   if (exact) return exact.id;
 
-  const byTitle = notes.find((n) => n.title === cleaned);
-  if (byTitle) return byTitle.id;
+  // 3. 按名字，同名优先同目录
+  const byTitle = notes.filter((n) => n.title === cleaned);
+  if (byTitle.length) {
+    const sameDir = byTitle.find((n) => (n.dir ?? '') === fromDir);
+    return (sameDir ?? byTitle[0]).id;
+  }
 
+  // 4. 忽略大小写
   const lower = cleaned.toLowerCase();
-  const insensitive = notes.find(
+  const loose = notes.filter(
     (n) => n.id.toLowerCase() === lower || n.title.toLowerCase() === lower,
   );
-  return insensitive ? insensitive.id : null;
+  if (!loose.length) return null;
+  const sameDir = loose.find((n) => (n.dir ?? '') === fromDir);
+  return (sameDir ?? loose[0]).id;
 }
 
 /**

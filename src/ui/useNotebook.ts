@@ -9,6 +9,7 @@ import {
   newMarkdownCell,
 } from '@core/model';
 import type { NotebookRef, NotebookStore } from '@core/store/index';
+import { dirOf } from '@core/store/paths';
 
 const SAVE_DEBOUNCE_MS = 500;
 const WATCH_INTERVAL_MS = 2000;
@@ -19,6 +20,7 @@ const WATCH_INTERVAL_MS = 2000;
  */
 export function useNotebook(store: NotebookStore | null) {
   const [refs, setRefs] = useState<NotebookRef[]>([]);
+  const [folders, setFolders] = useState<string[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [nb, setNb] = useState<Notebook | null>(null);
   const [saving, setSaving] = useState(false);
@@ -42,12 +44,19 @@ export function useNotebook(store: NotebookStore | null) {
   activeIdRef.current = activeId;
   missingFileRef.current = missingFile;
 
-  const refresh = useCallback(async () => {
-    if (!store) return [];
-    const list = await store.list();
-    setRefs(list);
-    return list;
+  /** 列举笔记与目录；只有落盘的实现有目录概念 */
+  const listBoth = useCallback(async () => {
+    if (!store) return { notes: [] as NotebookRef[], folders: [] as string[] };
+    if (store.listAll) return await store.listAll();
+    return { notes: await store.list(), folders: [] as string[] };
   }, [store]);
+
+  const refresh = useCallback(async () => {
+    const { notes, folders: dirs } = await listBoth();
+    setRefs(notes);
+    setFolders(dirs);
+    return notes;
+  }, [listBoth]);
 
   /**
    * 写盘。写之前先确认文件没被别处改过，
@@ -158,8 +167,9 @@ export function useNotebook(store: NotebookStore | null) {
     initialized.current = store;
     void (async () => {
       try {
-        const list = await store.list();
+        const { notes: list, folders: dirs } = await listBoth();
         setRefs(list);
+        setFolders(dirs);
         if (list.length) {
           const loaded = await store.load(list[0].id);
           nbRef.current = loaded;
@@ -170,12 +180,13 @@ export function useNotebook(store: NotebookStore | null) {
           nbRef.current = created;
           setNb(created);
           setActiveId(created.id);
-          setRefs(await store.list());
+          await refresh();
         }
       } catch (e) {
         setError(String((e as Error)?.message ?? e));
       }
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [store]);
 
   /**
@@ -185,10 +196,14 @@ export function useNotebook(store: NotebookStore | null) {
   const checkExternal = useCallback(async () => {
     if (!store) return;
     try {
-      const list = await store.list();
+      const { notes: list, folders: dirs } = await listBoth();
       setRefs((prev) => {
         const same = prev.length === list.length && prev.every((r, i) => r.id === list[i].id);
         return same ? prev : list;
+      });
+      setFolders((prev) => {
+        const same = prev.length === dirs.length && prev.every((d, i) => d === dirs[i]);
+        return same ? prev : dirs;
       });
 
       const active = activeIdRef.current;
@@ -207,7 +222,7 @@ export function useNotebook(store: NotebookStore | null) {
     } catch {
       // 目录临时读不到，等下一轮
     }
-  }, [store, reloadFromDisk]);
+  }, [store, listBoth, reloadFromDisk]);
 
   useEffect(() => {
     if (!store) return;
@@ -239,16 +254,48 @@ export function useNotebook(store: NotebookStore | null) {
   }, [flush]);
 
   const createNotebook = useCallback(
-    async (title: string) => {
+    async (title: string, dir = '') => {
       if (!store) return;
       await flush();
-      const created = await store.create(title);
+      const created = await store.create(title, dir);
       nbRef.current = created;
       setNb(created);
       setActiveId(created.id);
-      setRefs(await store.list());
+      setMissingFile(false);
+      await refresh();
     },
-    [store, flush],
+    [store, flush, refresh],
+  );
+
+  const createFolder = useCallback(
+    async (dir: string) => {
+      if (!store?.createFolder) return;
+      try {
+        await store.createFolder(dir);
+        await refresh();
+      } catch (e) {
+        setError(String((e as Error)?.message ?? e));
+      }
+    },
+    [store, refresh],
+  );
+
+  /** 把笔记移到另一个目录 */
+  const moveNotebook = useCallback(
+    async (id: string, targetDir: string) => {
+      if (!store?.move) return;
+      if (dirOf(id) === targetDir) return;
+      const wasActive = id === activeIdRef.current;
+      if (wasActive) await flush();
+      try {
+        const nextId = await store.move(id, targetDir);
+        await refresh();
+        if (wasActive) await open(nextId);
+      } catch (e) {
+        setError(String((e as Error)?.message ?? e));
+      }
+    },
+    [store, flush, refresh, open],
   );
 
   const removeNotebook = useCallback(
@@ -271,15 +318,14 @@ export function useNotebook(store: NotebookStore | null) {
         setError(`删除失败：${String((e as Error)?.message ?? e)}`);
         return;
       }
-      const list = await store.list();
-      setRefs(list);
+      const list = await refresh();
       if (id === activeIdRef.current) {
         setActiveId(null);
         if (list.length) await open(list[0].id);
         else await createNotebook('未命名笔记');
       }
     },
-    [store, open, createNotebook],
+    [store, open, createNotebook, refresh],
   );
 
   const retitle = useCallback(
@@ -296,9 +342,9 @@ export function useNotebook(store: NotebookStore | null) {
           setNb(reloaded);
         }
       }
-      setRefs(await store.list());
+      await refresh();
     },
-    [store, activeId, update, flush],
+    [store, activeId, update, flush, refresh],
   );
 
   /** 导入来的笔记：写进存储再打开 */
@@ -312,13 +358,16 @@ export function useNotebook(store: NotebookStore | null) {
       nbRef.current = merged;
       setNb(merged);
       setActiveId(created.id);
-      setRefs(await store.list());
+      await refresh();
     },
-    [store, flush],
+    [store, flush, refresh],
   );
 
   return {
     refs,
+    folders,
+    createFolder,
+    moveNotebook,
     activeId,
     nb,
     saving,

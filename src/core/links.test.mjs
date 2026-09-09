@@ -105,9 +105,9 @@ test('中英文标题都能生成锚点', () => {
 console.log('\n笔记链接解析');
 
 const notes = [
-  { id: '项目A', title: '项目A' },
-  { id: '欢迎使用 NoteX', title: '欢迎使用 NoteX' },
-  { id: 'Deploy Guide', title: 'Deploy Guide' },
+  { id: '项目A', title: '项目A', dir: '' },
+  { id: '欢迎使用 NoteX', title: '欢迎使用 NoteX', dir: '' },
+  { id: 'Deploy Guide', title: 'Deploy Guide', dir: '' },
 ];
 
 test('按 id 精确匹配', () => {
@@ -134,6 +134,31 @@ test('带空格的标题可解析', () => {
 test('找不到时返回 null，不乱跳', () => {
   assert.equal(resolveNoteLink('不存在的笔记', notes), null);
   assert.equal(resolveNoteLink('   ', notes), null);
+});
+
+console.log('\n目录下的链接解析');
+
+const nested = [
+  { id: '周报', title: '周报', dir: '' },
+  { id: '工作/周报', title: '周报', dir: '工作' },
+  { id: '工作/项目A/设计文档', title: '设计文档', dir: '工作/项目A' },
+];
+
+test('优先按相对当前目录的路径解析', () => {
+  assert.equal(resolveNoteLink('项目A/设计文档', nested, '工作'), '工作/项目A/设计文档');
+});
+
+test('相对库根的完整路径可用', () => {
+  assert.equal(resolveNoteLink('工作/项目A/设计文档', nested, ''), '工作/项目A/设计文档');
+});
+
+test('同名笔记优先选同目录的那个', () => {
+  assert.equal(resolveNoteLink('周报', nested, '工作'), '工作/周报');
+  assert.equal(resolveNoteLink('周报', nested, ''), '周报');
+});
+
+test('不在同目录时仍能按名字找到', () => {
+  assert.equal(resolveNoteLink('设计文档', nested, ''), '工作/项目A/设计文档');
 });
 
 console.log('\nwiki 链接展开');

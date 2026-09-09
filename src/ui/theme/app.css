@@ -860,3 +860,61 @@ svg.nx-out-html {
     transform: rotate(360deg);
   }
 }
+
+/* 目录树 */
+.nx-tree {
+  min-height: 40px;
+}
+.nx-tree[data-drop='true'] {
+  outline: 1px dashed var(--nx-border-strong);
+  outline-offset: -2px;
+  border-radius: var(--nx-radius-sm);
+}
+
+.nx-folder {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 6px 6px 10px;
+  border-radius: var(--nx-radius-sm);
+  cursor: pointer;
+  font-size: var(--nx-font-size);
+  color: var(--nx-fg-muted);
+  user-select: none;
+}
+.nx-folder:hover {
+  background: var(--nx-bg-hover);
+  color: var(--nx-fg);
+}
+.nx-folder[data-drop='true'] {
+  background: var(--nx-bg-active);
+  color: var(--nx-fg);
+  outline: 1px solid var(--nx-border-strong);
+}
+.nx-folder-caret {
+  display: inline-block;
+  flex: none;
+  width: 10px;
+  color: var(--nx-fg-faint);
+  transition: transform 0.12s;
+}
+.nx-folder-caret[data-open='true'] {
+  transform: rotate(90deg);
+}
+.nx-folder-count {
+  font-size: 11px;
+  color: var(--nx-fg-faint);
+  flex: none;
+}
+
+.nx-sidebar-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 12px;
+}
+.nx-sidebar-actions .nx-btn-outline {
+  flex: 1;
+  padding: 7px 8px;
+  font-size: 12.5px;
+  white-space: nowrap;
+}

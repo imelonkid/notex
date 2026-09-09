@@ -17,7 +17,12 @@ export class LocalStore implements NotebookStore {
   }
 
   async list(): Promise<NotebookRef[]> {
-    return this.ws.notebooks.map((n) => ({ id: n.id, title: n.title, updated: n.updated }));
+    return this.ws.notebooks.map((n) => ({
+      id: n.id,
+      title: n.title,
+      dir: '',
+      updated: n.updated,
+    }));
   }
 
   async load(id: string): Promise<Notebook | null> {
