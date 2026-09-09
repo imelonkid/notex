@@ -270,19 +270,47 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
   // 新建笔记与文件夹落在当前笔记所在的目录
   const currentDir = book.activeId ? dirOf(book.activeId) : '';
 
-  /** 「移动到」的候选目录：根目录加上所有已有目录，去掉自己当前所在的 */
-  const moveTargets = (fromDir: string): MenuItem[] =>
-    ['', ...book.folders]
-      .filter((d) => d !== fromDir)
-      .map((d) => ({
-        label: d === '' ? '　根目录' : '　' + d,
-        onSelect: () => {},
-        disabled: true,
-      }));
+  /**
+   * 「移动到」按目录层级做成多级子菜单，而不是把 "工作/项目A" 这种
+   * 完整路径平铺出来。有子目录的目录自己也可当落点，放在子菜单第一项。
+   */
+  const buildMoveMenu = (noteId: string): MenuItem[] => {
+    const fromDir = dirOf(noteId);
+    const childrenOf = (parent: string) =>
+      book.folders.filter((d) => dirOf(d) === parent);
+
+    const nodeFor = (dir: string): MenuItem => {
+      const subs = childrenOf(dir);
+      const self: MenuItem = {
+        label: baseOf(dir),
+        onSelect: () => void book.moveNotebook(noteId, dir),
+        disabled: dir === fromDir,
+      };
+      if (!subs.length) return self;
+      return {
+        label: baseOf(dir),
+        children: [
+          {
+            label: `放到「${baseOf(dir)}」`,
+            onSelect: () => void book.moveNotebook(noteId, dir),
+            disabled: dir === fromDir,
+          },
+          ...subs.map((d) => ({ ...nodeFor(d), separatorBefore: d === subs[0] })),
+        ],
+      };
+    };
+
+    return [
+      {
+        label: '根目录',
+        onSelect: () => void book.moveNotebook(noteId, ''),
+        disabled: fromDir === '',
+      },
+      ...childrenOf('').map((d, i) => ({ ...nodeFor(d), separatorBefore: i === 0 })),
+    ];
+  };
 
   const openNoteMenu = (id: string, x: number, y: number) => {
-    const fromDir = dirOf(id);
-    const targets = ['', ...book.folders].filter((d) => d !== fromDir);
     const items: MenuItem[] = [
       { label: '打开', onSelect: () => void book.open(id) },
       {
@@ -292,26 +320,18 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
           if (next?.trim()) void book.renameNotebook(id, next.trim());
         },
       },
-    ];
-    if (targets.length) {
-      items.push({ label: '移动到', onSelect: () => {}, disabled: true, separatorBefore: true });
-      for (const d of targets) {
-        items.push({
-          label: d === '' ? '　根目录' : `　${d}`,
-          onSelect: () => void book.moveNotebook(id, d),
-        });
-      }
-    }
-    items.push({
-      label: '删除笔记',
-      danger: true,
-      separatorBefore: true,
-      onSelect: () => {
-        if (window.confirm(`确定删除「${baseOf(id)}」？文件会从笔记库里移除。`)) {
-          void book.removeNotebook(id);
-        }
+      { label: '移动到', separatorBefore: true, children: buildMoveMenu(id) },
+      {
+        label: '删除笔记',
+        danger: true,
+        separatorBefore: true,
+        onSelect: () => {
+          if (window.confirm(`确定删除「${baseOf(id)}」？文件会从笔记库里移除。`)) {
+            void book.removeNotebook(id);
+          }
+        },
       },
-    });
+    ];
     setMenu({ x, y, items });
   };
 
@@ -342,7 +362,6 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
     }
     setMenu({ x, y, items });
   };
-  void moveTargets;
   const anyRunning = Object.keys(runningIds).length > 0;
   void revision;
 

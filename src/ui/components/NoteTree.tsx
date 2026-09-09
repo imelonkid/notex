@@ -2,12 +2,16 @@ import { useMemo } from 'react';
 import type { NotebookRef } from '@core/store/index';
 import { baseOf, compareNames, dirOf, joinId } from '@core/store/paths';
 
+/** 自定义类型让 dragover 不必依赖 React 状态就能判断能否放置 */
+export const DRAG_MIME = 'application/x-notex-note';
+
 interface Props {
   notes: NotebookRef[];
   folders: string[];
   activeId: string | null;
   expanded: Set<string>;
   dragId: string | null;
+  /** 拖拽悬停的目标目录，null 表示没有 */
   dropDir: string | null;
   onToggle(dir: string): void;
   onOpen(id: string): void;
@@ -19,15 +23,20 @@ interface Props {
   onDropTo(dir: string): void;
 }
 
+interface Row extends NotebookRef {
+  /** 拖拽预览行：显示笔记落到目标目录后会在哪 */
+  ghost?: boolean;
+}
+
 interface TreeNode {
   dir: string;
   name: string;
   children: TreeNode[];
-  notes: NotebookRef[];
+  notes: Row[];
 }
 
 /** 把平铺的笔记与目录列表组装成树；存储层只负责列举，树在这里拼 */
-function buildTree(notes: NotebookRef[], folders: string[]): TreeNode {
+function buildTree(notes: Row[], folders: string[]): TreeNode {
   const root: TreeNode = { dir: '', name: '', children: [], notes: [] };
   const byDir = new Map<string, TreeNode>([['', root]]);
 
@@ -56,27 +65,60 @@ function buildTree(notes: NotebookRef[], folders: string[]): TreeNode {
   return root;
 }
 
-export function NoteTree(props: Props) {
-  const tree = useMemo(
-    () => buildTree(props.notes, props.folders),
-    [props.notes, props.folders],
-  );
+/**
+ * 拖拽过程中把被拖的笔记临时挪到目标目录，
+ * 树直接显示放手之后的样子。列表按名字排序，
+ * 所以落点由名字决定，预览行会出现在它最终该在的位置。
+ */
+function withPreview(notes: NotebookRef[], dragId: string | null, dropDir: string | null): Row[] {
+  if (!dragId || dropDir === null) return notes;
+  const dragged = notes.find((n) => n.id === dragId);
+  if (!dragged || dragged.dir === dropDir) return notes;
+  return notes.map((n) => (n.id === dragId ? { ...n, dir: dropDir, ghost: true } : n));
+}
 
-  const renderNotes = (notes: NotebookRef[], depth: number) =>
+export function NoteTree(props: Props) {
+  const rows = useMemo(
+    () => withPreview(props.notes, props.dragId, props.dropDir),
+    [props.notes, props.dragId, props.dropDir],
+  );
+  const tree = useMemo(() => buildTree(rows, props.folders), [rows, props.folders]);
+
+  /** 拖到笔记上等同于拖到它所在的目录，这样目标好命中得多 */
+  const allowDrop = (e: React.DragEvent, dir: string) => {
+    if (!e.dataTransfer.types.includes(DRAG_MIME)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+    props.onDragOverDir(dir);
+  };
+
+  const handleDrop = (e: React.DragEvent, dir: string) => {
+    if (!e.dataTransfer.types.includes(DRAG_MIME)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    props.onDropTo(dir);
+  };
+
+  const renderNotes = (notes: Row[], depth: number) =>
     notes.map((ref) => (
       <div
         key={ref.id}
         className="nx-nb-item"
         data-active={ref.id === props.activeId}
+        data-ghost={ref.ghost ? 'true' : undefined}
         style={{ paddingLeft: 10 + depth * 12 }}
         draggable
         onDragStart={(e) => {
-          // 不写 dataTransfer 的话真实鼠标拖拽在 WebKit 里根本起不来
-          e.dataTransfer.setData('text/plain', ref.id);
+          // WebKit 里不写 dataTransfer 就发不出拖拽
+          e.dataTransfer.setData(DRAG_MIME, ref.id);
+          e.dataTransfer.setData('text/plain', ref.title);
           e.dataTransfer.effectAllowed = 'move';
           props.onDragStart(ref.id);
         }}
         onDragEnd={props.onDragEnd}
+        onDragOver={(e) => allowDrop(e, ref.dir)}
+        onDrop={(e) => handleDrop(e, ref.dir)}
         onClick={() => props.onOpen(ref.id)}
         onContextMenu={(e) => {
           e.preventDefault();
@@ -91,12 +133,12 @@ export function NoteTree(props: Props) {
 
   const renderFolder = (node: TreeNode, depth: number) => {
     const open = props.expanded.has(node.dir);
-    const isDropTarget = props.dragId !== null && props.dropDir === node.dir;
+    const isTarget = props.dragId !== null && props.dropDir === node.dir;
     return (
       <div key={node.dir}>
         <div
           className="nx-folder"
-          data-drop={isDropTarget}
+          data-drop={isTarget}
           style={{ paddingLeft: 10 + depth * 12 }}
           onClick={() => props.onToggle(node.dir)}
           onContextMenu={(e) => {
@@ -104,17 +146,8 @@ export function NoteTree(props: Props) {
             e.stopPropagation();
             props.onFolderMenu(node.dir, e.clientX, e.clientY);
           }}
-          onDragOver={(e) => {
-            if (!props.dragId) return;
-            e.preventDefault();
-            e.dataTransfer.dropEffect = 'move';
-            props.onDragOverDir(node.dir);
-          }}
-          onDragLeave={() => props.onDragOverDir(null)}
-          onDrop={(e) => {
-            e.preventDefault();
-            props.onDropTo(node.dir);
-          }}
+          onDragOver={(e) => allowDrop(e, node.dir)}
+          onDrop={(e) => handleDrop(e, node.dir)}
           title={node.dir}
         >
           <span className="nx-folder-caret" data-open={open}>
@@ -133,21 +166,15 @@ export function NoteTree(props: Props) {
     );
   };
 
-  const rootIsDropTarget = props.dragId !== null && props.dropDir === '';
-
   return (
     <div
       className="nx-tree"
-      data-drop={rootIsDropTarget}
-      onDragOver={(e) => {
-        if (!props.dragId) return;
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
-        props.onDragOverDir('');
-      }}
-      onDrop={(e) => {
-        e.preventDefault();
-        props.onDropTo('');
+      data-drop={props.dragId !== null && props.dropDir === ''}
+      onDragOver={(e) => allowDrop(e, '')}
+      onDrop={(e) => handleDrop(e, '')}
+      onDragLeave={(e) => {
+        // 只有真正离开整棵树才清掉高亮，在内部元素之间移动不算
+        if (!e.currentTarget.contains(e.relatedTarget as Node)) props.onDragOverDir(null);
       }}
       onContextMenu={(e) => {
         e.preventDefault();

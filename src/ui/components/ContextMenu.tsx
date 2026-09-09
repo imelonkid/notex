@@ -2,12 +2,14 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 export interface MenuItem {
   label: string;
-  onSelect(): void;
+  onSelect?(): void;
   /** 危险操作用醒目的颜色 */
   danger?: boolean;
   disabled?: boolean;
   /** 之前插一条分隔线 */
   separatorBefore?: boolean;
+  /** 有子项时悬停展开二级菜单 */
+  children?: MenuItem[];
 }
 
 export interface MenuState {
@@ -61,23 +63,46 @@ export function ContextMenu({ state, onClose }: { state: MenuState; onClose(): v
       role="menu"
       onContextMenu={(e) => e.preventDefault()}
     >
-      {state.items.map((item, i) => (
-        <div key={i}>
+      <MenuList items={state.items} onClose={onClose} />
+    </div>
+  );
+}
+
+/** 一层菜单；带 children 的项悬停展开二级菜单 */
+function MenuList({ items, onClose }: { items: MenuItem[]; onClose(): void }) {
+  const [openIndex, setOpenIndex] = useState<number | null>(null);
+
+  return (
+    <>
+      {items.map((item, i) => (
+        <div
+          key={i}
+          className="nx-menu-row"
+          onMouseEnter={() => setOpenIndex(item.children?.length ? i : null)}
+        >
           {item.separatorBefore && <div className="nx-menu-sep" />}
           <button
             className="nx-menu-item"
             role="menuitem"
             data-danger={item.danger}
+            data-submenu={item.children?.length ? 'true' : undefined}
             disabled={item.disabled}
             onClick={() => {
+              if (item.children?.length) return;
               onClose();
-              item.onSelect();
+              item.onSelect?.();
             }}
           >
-            {item.label}
+            <span>{item.label}</span>
+            {item.children?.length ? <span className="nx-menu-arrow">›</span> : null}
           </button>
+          {openIndex === i && item.children?.length ? (
+            <div className="nx-submenu">
+              <MenuList items={item.children} onClose={onClose} />
+            </div>
+          ) : null}
         </div>
       ))}
-    </div>
+    </>
   );
 }
