@@ -121,6 +121,52 @@ test('旁车输出能还原', () => {
   assert.equal(c2.execN, 1);
 });
 
+console.log('\n隐藏元数据');
+
+test('meta 往返保持', () => {
+  const nb = { ...sample, meta: { uid: 'abc123', tags: ['工作'], aliases: ['周报'] } };
+  const back = markdownToNotebook(notebookToMarkdown(nb));
+  assert.equal(back.meta.uid, 'abc123');
+  assert.deepEqual(back.meta.tags, ['工作']);
+  assert.deepEqual(back.meta.aliases, ['周报']);
+});
+
+test('未知字段原样保留，便于以后扩展', () => {
+  const nb = { ...sample, meta: { uid: 'x', 自定义: { a: 1, b: [2, 3] } } };
+  const back = markdownToNotebook(notebookToMarkdown(nb));
+  assert.deepEqual(back.meta['自定义'], { a: 1, b: [2, 3] });
+});
+
+test('meta 不出现在正文里', () => {
+  const md = notebookToMarkdown({ ...sample, meta: { uid: 'zzz' } });
+  const body = md.slice(md.indexOf('---', 3) + 3);
+  assert.ok(!body.includes('zzz'), '元数据不该进入正文');
+  const back = markdownToNotebook(md);
+  assert.ok(!back.cells.some((c) => c.source.includes('zzz')), '元数据不该变成 cell');
+});
+
+test('没有 meta 的老笔记读出来会补上稳定标识', () => {
+  const plain = '---\nnotex: 1\ntitle: "旧笔记"\n---\n正文';
+  const back = markdownToNotebook(plain);
+  assert.ok(back.meta.uid && back.meta.uid.length > 8, '应自动补 uid');
+});
+
+test('meta 内容损坏不影响笔记打开', () => {
+  const broken = '---\nnotex: 1\ntitle: "坏的"\nmeta: {不是合法JSON\n---\n# 正文还在';
+  const back = markdownToNotebook(broken);
+  assert.equal(back.title, '坏的');
+  assert.ok(back.cells.some((c) => c.source.includes('正文还在')));
+});
+
+test('含引号与换行的 meta 不破坏 frontmatter 结构', () => {
+  const nb = { ...sample, meta: { uid: 'x', 备注: '带"引号"\n和换行' } };
+  const md = notebookToMarkdown(nb);
+  const fmLines = md.split('\n').slice(1, md.split('\n').indexOf('---', 1));
+  assert.ok(fmLines.every((l) => l.includes(':')), 'frontmatter 每行都该是键值对');
+  const back = markdownToNotebook(md);
+  assert.equal(back.meta['备注'], '带"引号"\n和换行');
+});
+
 console.log('\nipynb 往返');
 
 test('产出合法的 nbformat 4 结构', () => {

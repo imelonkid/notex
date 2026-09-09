@@ -48,4 +48,5 @@ export interface NotebookStore {
   listAll?(): Promise<VaultListing>;
   move?(id: string, targetDir: string): Promise<string>;
   createFolder?(dir: string): Promise<void>;
+  removeFolder?(dir: string): Promise<void>;
 }

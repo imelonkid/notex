@@ -918,3 +918,42 @@ svg.nx-out-html {
   font-size: 12.5px;
   white-space: nowrap;
 }
+
+/* 右键菜单 */
+.nx-menu {
+  position: fixed;
+  z-index: 100;
+  min-width: 168px;
+  padding: 4px;
+  background: var(--nx-bg);
+  border: 1px solid var(--nx-border-strong);
+  border-radius: var(--nx-radius);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.16);
+}
+.nx-menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  color: var(--nx-fg);
+  font-size: 12.5px;
+  padding: 6px 10px;
+  border-radius: var(--nx-radius-sm);
+  white-space: nowrap;
+}
+.nx-menu-item:hover:not(:disabled) {
+  background: var(--nx-bg-hover);
+}
+.nx-menu-item[data-danger='true'] {
+  color: var(--nx-danger);
+}
+.nx-menu-item:disabled {
+  color: var(--nx-fg-ghost);
+  cursor: default;
+}
+.nx-menu-sep {
+  height: 1px;
+  background: var(--nx-border);
+  margin: 4px 6px;
+}

@@ -37,6 +37,23 @@ export interface CodeCell {
 
 export type Cell = MarkdownCell | CodeCell;
 
+/**
+ * 笔记的隐藏元数据。写在 frontmatter 里，随文件走，界面不渲染。
+ * 用来维护文档之间的关系等信息，字段可以按需扩展。
+ */
+export interface NoteMeta {
+  /**
+   * 稳定标识，创建时生成后不再变。
+   * 文件改名或移动都不影响它，是将来做重命名不断链的基础。
+   */
+  uid?: string;
+  /** 别名，供链接按别名引用 */
+  aliases?: string[];
+  tags?: string[];
+  /** 留给后续扩展，未知字段原样保留 */
+  [key: string]: unknown;
+}
+
 export interface Notebook {
   id: string;
   title: string;
@@ -44,11 +61,20 @@ export interface Notebook {
   counter: number;
   created: string;
   updated: string;
+  meta?: NoteMeta;
 }
 
 export interface Workspace {
   activeId: string;
   notebooks: Notebook[];
+}
+
+/** 笔记的稳定标识，与文件名无关 */
+export function newNoteUid(): string {
+  const rand =
+    globalThis.crypto?.randomUUID?.() ??
+    Math.random().toString(36).slice(2) + Date.now().toString(36);
+  return rand.replace(/-/g, '').slice(0, 22);
 }
 
 let seq = 0;
@@ -77,6 +103,7 @@ export function newNotebook(title = '未命名笔记'): Notebook {
     counter: 0,
     created: now,
     updated: now,
+    meta: { uid: newNoteUid() },
     cells: [newMarkdownCell('# ' + title + '\n\n双击这里开始编辑。'), newCodeCell('java', '')],
   };
 }

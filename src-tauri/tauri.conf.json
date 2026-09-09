@@ -19,7 +19,8 @@
         "minHeight": 520,
         "titleBarStyle": "Transparent",
         "hiddenTitle": true,
-        "resizable": true
+        "resizable": true,
+        "dragDropEnabled": false
       }
     ],
     "security": {

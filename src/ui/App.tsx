@@ -3,10 +3,11 @@ import { LANGS, isCode, type LangId, type Output } from '@core/model';
 import { exportIpynb, exportMarkdown, importNotebook } from '@core/files';
 import { parseDeps } from '@core/deps';
 import { resolveNoteLink } from '@core/links';
-import { dirOf, joinId } from '@core/store/paths';
+import { baseOf, dirOf, joinId } from '@core/store/paths';
 import type { StoreSetup } from '@core/store/index';
 import { Cell } from './components/Cell';
 import { NoteTree } from './components/NoteTree';
+import { ContextMenu, type MenuItem, type MenuState } from './components/ContextMenu';
 import { SettingsModal } from './components/SettingsModal';
 import { useRuntimes } from './RuntimeContext';
 import { scrollToHeadingText, useLinkInterceptor } from './useLinkInterceptor';
@@ -33,6 +34,7 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
   });
   const [dragNoteId, setDragNoteId] = useState<string | null>(null);
   const [dropDir, setDropDir] = useState<string | null>(null);
+  const [menu, setMenu] = useState<MenuState | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(
     () => localStorage.getItem('nx.sidebar.collapsed') === '1',
   );
@@ -267,6 +269,80 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
   const nb = book.nb;
   // 新建笔记与文件夹落在当前笔记所在的目录
   const currentDir = book.activeId ? dirOf(book.activeId) : '';
+
+  /** 「移动到」的候选目录：根目录加上所有已有目录，去掉自己当前所在的 */
+  const moveTargets = (fromDir: string): MenuItem[] =>
+    ['', ...book.folders]
+      .filter((d) => d !== fromDir)
+      .map((d) => ({
+        label: d === '' ? '　根目录' : '　' + d,
+        onSelect: () => {},
+        disabled: true,
+      }));
+
+  const openNoteMenu = (id: string, x: number, y: number) => {
+    const fromDir = dirOf(id);
+    const targets = ['', ...book.folders].filter((d) => d !== fromDir);
+    const items: MenuItem[] = [
+      { label: '打开', onSelect: () => void book.open(id) },
+      {
+        label: '重命名…',
+        onSelect: () => {
+          const next = window.prompt('新的笔记名', baseOf(id));
+          if (next?.trim()) void book.renameNotebook(id, next.trim());
+        },
+      },
+    ];
+    if (targets.length) {
+      items.push({ label: '移动到', onSelect: () => {}, disabled: true, separatorBefore: true });
+      for (const d of targets) {
+        items.push({
+          label: d === '' ? '　根目录' : `　${d}`,
+          onSelect: () => void book.moveNotebook(id, d),
+        });
+      }
+    }
+    items.push({
+      label: '删除笔记',
+      danger: true,
+      separatorBefore: true,
+      onSelect: () => {
+        if (window.confirm(`确定删除「${baseOf(id)}」？文件会从笔记库里移除。`)) {
+          void book.removeNotebook(id);
+        }
+      },
+    });
+    setMenu({ x, y, items });
+  };
+
+  const openFolderMenu = (dir: string, x: number, y: number) => {
+    const inside = book.refs.filter((r) => r.dir === dir || r.dir.startsWith(dir + '/'));
+    const items: MenuItem[] = [
+      { label: '在此新建笔记', onSelect: () => void book.createNotebook('未命名笔记', dir) },
+      {
+        label: '在此新建文件夹',
+        onSelect: () => {
+          const name = window.prompt('新文件夹名称', '新文件夹');
+          if (name?.trim()) void book.createFolder(joinId(dir, name.trim()));
+        },
+      },
+    ];
+    if (dir) {
+      items.push({
+        label: '删除文件夹',
+        danger: true,
+        separatorBefore: true,
+        onSelect: () => {
+          const msg = inside.length
+            ? `「${baseOf(dir)}」里有 ${inside.length} 篇笔记，一并删除？`
+            : `确定删除空文件夹「${baseOf(dir)}」？`;
+          if (window.confirm(msg)) void book.removeFolder(dir);
+        },
+      });
+    }
+    setMenu({ x, y, items });
+  };
+  void moveTargets;
   const anyRunning = Object.keys(runningIds).length > 0;
   void revision;
 
@@ -346,7 +422,8 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
               void book.open(id);
               setEditingId(null);
             }}
-            onRemove={(id) => void book.removeNotebook(id)}
+            onNoteMenu={openNoteMenu}
+            onFolderMenu={openFolderMenu}
             onDragStart={setDragNoteId}
             onDragEnd={() => {
               setDragNoteId(null);
@@ -558,6 +635,8 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
           )}
         </div>
       </main>
+
+      {menu && <ContextMenu state={menu} onClose={() => setMenu(null)} />}
 
       {settingsOpen && (
         <SettingsModal

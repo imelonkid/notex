@@ -11,7 +11,8 @@ interface Props {
   dropDir: string | null;
   onToggle(dir: string): void;
   onOpen(id: string): void;
-  onRemove(id: string): void;
+  onNoteMenu(id: string, x: number, y: number): void;
+  onFolderMenu(dir: string, x: number, y: number): void;
   onDragStart(id: string): void;
   onDragEnd(): void;
   onDragOverDir(dir: string | null): void;
@@ -69,22 +70,22 @@ export function NoteTree(props: Props) {
         data-active={ref.id === props.activeId}
         style={{ paddingLeft: 10 + depth * 12 }}
         draggable
-        onDragStart={() => props.onDragStart(ref.id)}
+        onDragStart={(e) => {
+          // 不写 dataTransfer 的话真实鼠标拖拽在 WebKit 里根本起不来
+          e.dataTransfer.setData('text/plain', ref.id);
+          e.dataTransfer.effectAllowed = 'move';
+          props.onDragStart(ref.id);
+        }}
         onDragEnd={props.onDragEnd}
         onClick={() => props.onOpen(ref.id)}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          props.onNoteMenu(ref.id, e.clientX, e.clientY);
+        }}
         title={ref.id}
       >
         <span className="nx-nb-title">{ref.title || '未命名笔记'}</span>
-        <button
-          className="nx-nb-remove"
-          title="删除笔记"
-          onClick={(e) => {
-            e.stopPropagation();
-            props.onRemove(ref.id);
-          }}
-        >
-          ×
-        </button>
       </div>
     ));
 
@@ -98,11 +99,18 @@ export function NoteTree(props: Props) {
           data-drop={isDropTarget}
           style={{ paddingLeft: 10 + depth * 12 }}
           onClick={() => props.onToggle(node.dir)}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            props.onFolderMenu(node.dir, e.clientX, e.clientY);
+          }}
           onDragOver={(e) => {
             if (!props.dragId) return;
             e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
             props.onDragOverDir(node.dir);
           }}
+          onDragLeave={() => props.onDragOverDir(null)}
           onDrop={(e) => {
             e.preventDefault();
             props.onDropTo(node.dir);
@@ -134,11 +142,16 @@ export function NoteTree(props: Props) {
       onDragOver={(e) => {
         if (!props.dragId) return;
         e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
         props.onDragOverDir('');
       }}
       onDrop={(e) => {
         e.preventDefault();
         props.onDropTo('');
+      }}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        props.onFolderMenu('', e.clientX, e.clientY);
       }}
     >
       {tree.children.map((child) => renderFolder(child, 0))}

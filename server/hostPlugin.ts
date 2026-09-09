@@ -214,6 +214,11 @@ export function hostPlugin(): Plugin {
             await rm(body.path, { force: true });
             return json(res, 200, { ok: true });
           }
+          if (url.pathname === '/rmdir' && req.method === 'POST') {
+            const body = await readBody(req);
+            await rm(body.path, { recursive: true, force: true });
+            return json(res, 200, { ok: true });
+          }
           if (url.pathname === '/rename' && req.method === 'POST') {
             const body = await readBody(req);
             await mkdir(path.dirname(body.to), { recursive: true });

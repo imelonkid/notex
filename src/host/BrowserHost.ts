@@ -62,6 +62,9 @@ export class BrowserHost implements HostBridge {
   async removeFile(): Promise<void> {
     throw new HostCapabilityError('删除文件');
   }
+  async removeDir(): Promise<void> {
+    throw new HostCapabilityError('删除目录');
+  }
   async renameFile(): Promise<void> {
     throw new HostCapabilityError('重命名文件');
   }

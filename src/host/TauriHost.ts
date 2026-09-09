@@ -149,6 +149,10 @@ export class TauriHost implements HostBridge {
     await invoke('remove_file', { path });
   }
 
+  async removeDir(path: string): Promise<void> {
+    await invoke('remove_dir', { path });
+  }
+
   async renameFile(from: string, to: string): Promise<void> {
     await invoke('rename_file', { from, to });
   }

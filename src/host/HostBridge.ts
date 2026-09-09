@@ -73,6 +73,8 @@ export interface HostBridge {
   statFile(path: string): Promise<string | null>;
   ensureDir(path: string): Promise<void>;
   removeFile(path: string): Promise<void>;
+  /** 递归删除目录 */
+  removeDir(path: string): Promise<void>;
   renameFile(from: string, to: string): Promise<void>;
   /** 路径拼接由宿主做，避免前端猜分隔符 */
   joinPath(...parts: string[]): string;

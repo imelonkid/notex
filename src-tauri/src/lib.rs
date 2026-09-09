@@ -148,6 +148,15 @@ fn remove_file(path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn remove_dir(path: String) -> Result<(), String> {
+    match std::fs::remove_dir_all(&path) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(format!("{path}: {e}")),
+    }
+}
+
+#[tauri::command]
 fn rename_file(from: String, to: String) -> Result<(), String> {
     if let Some(parent) = PathBuf::from(&to).parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
@@ -345,6 +354,7 @@ pub fn run() {
             list_dir,
             ensure_dir,
             remove_file,
+            remove_dir,
             rename_file,
             env_var,
             which,

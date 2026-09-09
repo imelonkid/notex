@@ -193,6 +193,10 @@ export class DevServerHost implements HostBridge {
     await postJson('/remove', { path });
   }
 
+  async removeDir(path: string): Promise<void> {
+    await postJson('/rmdir', { path });
+  }
+
   async renameFile(from: string, to: string): Promise<void> {
     await postJson('/rename', { from, to });
   }

@@ -280,6 +280,53 @@ export function useNotebook(store: NotebookStore | null) {
     [store, refresh],
   );
 
+  /** 改笔记名：只改文件名，留在原目录 */
+  const renameNotebook = useCallback(
+    async (id: string, title: string) => {
+      if (!store) return;
+      const wasActive = id === activeIdRef.current;
+      if (wasActive) await flush();
+      try {
+        const nextId = await store.retitle(id, title);
+        await refresh();
+        if (wasActive) await open(nextId);
+      } catch (e) {
+        setError(String((e as Error)?.message ?? e));
+      }
+    },
+    [store, flush, refresh, open],
+  );
+
+  const removeFolder = useCallback(
+    async (dir: string) => {
+      if (!store?.removeFolder) return;
+      const active = activeIdRef.current;
+      // 当前笔记在被删的目录里时，先丢弃内存副本，避免被写回复活
+      if (active && (active === dir || active.startsWith(dir + '/'))) {
+        if (timer.current) {
+          clearTimeout(timer.current);
+          timer.current = null;
+        }
+        dirty.current = false;
+        nbRef.current = null;
+        setNb(null);
+        setActiveId(null);
+      }
+      try {
+        await store.removeFolder(dir);
+      } catch (e) {
+        setError(String((e as Error)?.message ?? e));
+        return;
+      }
+      const list = await refresh();
+      if (!activeIdRef.current) {
+        if (list.length) await open(list[0].id);
+        else await createNotebook('未命名笔记');
+      }
+    },
+    [store, refresh, open, createNotebook],
+  );
+
   /** 把笔记移到另一个目录 */
   const moveNotebook = useCallback(
     async (id: string, targetDir: string) => {
@@ -367,7 +414,9 @@ export function useNotebook(store: NotebookStore | null) {
     refs,
     folders,
     createFolder,
+    removeFolder,
     moveNotebook,
+    renameNotebook,
     activeId,
     nb,
     saving,

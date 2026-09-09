@@ -5,7 +5,15 @@
  * - Code cell 是围栏块，info string 形如 ```java {id=c2}
  * - outputs 不进 Markdown，由调用方存旁车 JSON
  */
-import { type Cell, type CodeCell, type LangId, type Notebook, uid } from './model';
+import {
+  type Cell,
+  type CodeCell,
+  type LangId,
+  type NoteMeta,
+  type Notebook,
+  newNoteUid,
+  uid,
+} from './model';
 
 const FENCE_LANG: Record<LangId, string> = { java: 'java', python: 'python', js: 'javascript' };
 
@@ -26,15 +34,19 @@ function fenceFor(source: string): string {
 }
 
 export function notebookToMarkdown(nb: Notebook): string {
-  const head = [
+  const lines = [
     '---',
     'notex: 1',
     `title: ${JSON.stringify(nb.title)}`,
     `created: ${nb.created}`,
     `updated: ${nb.updated}`,
-    '---',
-    '',
-  ].join('\n');
+  ];
+  // 隐藏元数据整体写成一行 JSON：frontmatter 保持行式结构，
+  // 又不必为嵌套字段引入一个 YAML 解析器
+  const meta = nb.meta && Object.keys(nb.meta).length ? nb.meta : null;
+  if (meta) lines.push(`meta: ${JSON.stringify(meta)}`);
+  lines.push('---', '');
+  const head = lines.join('\n');
 
   const body = nb.cells
     .map((cell) => {
@@ -52,6 +64,7 @@ interface Frontmatter {
   title?: string;
   created?: string;
   updated?: string;
+  meta?: string;
 }
 
 function parseFrontmatter(text: string): { fm: Frontmatter; rest: string } {
@@ -123,9 +136,22 @@ export function markdownToNotebook(text: string, fallbackTitle = '未命名笔�
   }
   flushMarkdown();
 
+  let meta: NoteMeta = {};
+  if (fm.meta) {
+    try {
+      const parsed = JSON.parse(fm.meta) as NoteMeta;
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) meta = parsed;
+    } catch {
+      // 元数据坏了不该导致整篇笔记打不开
+    }
+  }
+  // 老笔记没有稳定标识，读的时候补一个，下次保存就落盘了
+  if (!meta.uid) meta.uid = newNoteUid();
+
   const now = new Date().toISOString();
   return {
     id: uid('nb'),
+    meta,
     title: fm.title || fallbackTitle,
     cells: cells.length ? cells : [{ id: uid('c'), type: 'md', source: '' }],
     counter: 0,
