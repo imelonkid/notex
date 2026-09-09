@@ -40,6 +40,8 @@
   --nx-radius-sm: 3px;
   --nx-content-width: 1600px;
   --nx-page-pad-x: 28px;
+  /* 右侧留白单独给大一些：正文和滚动条之间要留出呼吸空间 */
+  --nx-page-pad-right: 56px;
   --nx-page-pad-top: 28px;
   --nx-gutter-width: 40px;
   --nx-sidebar-width: 230px;

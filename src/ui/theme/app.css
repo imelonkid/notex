@@ -249,7 +249,7 @@ button {
 .nx-page {
   max-width: var(--nx-content-width);
   margin: 0 auto;
-  padding: var(--nx-page-pad-top) var(--nx-page-pad-x) 40vh;
+  padding: var(--nx-page-pad-top) var(--nx-page-pad-right) 40vh var(--nx-page-pad-x);
   box-sizing: border-box;
 }
 
@@ -470,8 +470,13 @@ button {
   padding: 4px 10px;
   text-align: left;
 }
-.nx-out-html img {
+.nx-out-html img,
+.nx-out-html svg,
+img.nx-out-html,
+svg.nx-out-html {
   max-width: 100%;
+  height: auto;
+  display: block;
 }
 
 /* 安装引导卡片 */

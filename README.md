@@ -148,7 +148,8 @@ plt.rcParams["axes.unicode_minus"] = False
 
 - `⌘B` / `Ctrl+B` 折叠或展开左侧栏，状态记在本地
 - 内容区宽度、页面留白、左侧装订线宽度都是 token，可在主题包里覆盖：
-  `content-width`、`page-pad-x`、`page-pad-top`、`gutter-width`
+  `content-width`、`page-pad-x`（左）、`page-pad-right`（右）、
+  `page-pad-top`、`gutter-width`
 
 ## 关于 Java 的两个进程
 
