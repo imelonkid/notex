@@ -24,7 +24,7 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [depsStatus, setDepsStatus] = useState<Record<string, string>>({});
   const [sidebarCollapsed, setSidebarCollapsed] = useState(
-    () => localStorage.getItem('xnb.sidebar.collapsed') === '1',
+    () => localStorage.getItem('nx.sidebar.collapsed') === '1',
   );
   const wsRef = useRef(ws);
   wsRef.current = ws;
@@ -34,7 +34,7 @@ export function App() {
   }, [ws]);
 
   useEffect(() => {
-    localStorage.setItem('xnb.sidebar.collapsed', sidebarCollapsed ? '1' : '0');
+    localStorage.setItem('nx.sidebar.collapsed', sidebarCollapsed ? '1' : '0');
   }, [sidebarCollapsed]);
 
   // Cmd/Ctrl+B 切换侧栏，和常见编辑器一致
@@ -180,10 +180,10 @@ export function App() {
   void revision;
 
   return (
-    <div className="xnb-app" data-collapsed={sidebarCollapsed}>
+    <div className="nx-app" data-collapsed={sidebarCollapsed}>
       {sidebarCollapsed && (
         <button
-          className="xnb-sidebar-toggle"
+          className="nx-sidebar-toggle"
           data-floating="true"
           title="展开侧栏（⌘B）"
           aria-label="展开侧栏"
@@ -193,13 +193,13 @@ export function App() {
         </button>
       )}
 
-      <aside className="xnb-sidebar" data-collapsed={sidebarCollapsed}>
-        <div className="xnb-brand">
-          <div className="xnb-brand-name">xnotebook</div>
-          <div className="xnb-brand-sub">可执行笔记</div>
+      <aside className="nx-sidebar" data-collapsed={sidebarCollapsed}>
+        <div className="nx-brand">
+          <div className="nx-brand-name">NoteX</div>
+          <div className="nx-brand-sub">可执行笔记</div>
           <span style={{ flex: 1 }} />
           <button
-            className="xnb-sidebar-toggle"
+            className="nx-sidebar-toggle"
             title="折叠侧栏（⌘B）"
             aria-label="折叠侧栏"
             onClick={() => setSidebarCollapsed(true)}
@@ -208,20 +208,20 @@ export function App() {
           </button>
         </div>
 
-        <div className="xnb-section-label">我的笔记</div>
+        <div className="nx-section-label">我的笔记</div>
         {ws.notebooks.map((n) => (
           <div
             key={n.id}
-            className="xnb-nb-item"
+            className="nx-nb-item"
             data-active={n.id === ws.activeId}
             onClick={() => {
               setWs((w) => actions.selectNotebook(w, n.id));
               setEditingId(null);
             }}
           >
-            <span className="xnb-nb-title">{n.title || '未命名笔记'}</span>
+            <span className="nx-nb-title">{n.title || '未命名笔记'}</span>
             <button
-              className="xnb-nb-remove"
+              className="nx-nb-remove"
               title="删除笔记"
               onClick={(e) => {
                 e.stopPropagation();
@@ -234,7 +234,7 @@ export function App() {
         ))}
 
         <button
-          className="xnb-btn-outline"
+          className="nx-btn-outline"
           style={{ marginTop: 12 }}
           onClick={() => setWs((w) => actions.addNotebook(w))}
         >
@@ -243,7 +243,7 @@ export function App() {
 
         <div style={{ flex: 1 }} />
 
-        <div className="xnb-runtime-panel">
+        <div className="nx-runtime-panel">
           {LANGS.map((l) => {
             const state = registry.get(l.id);
             const label =
@@ -261,46 +261,46 @@ export function App() {
                           ? '启动失败'
                           : '未检测';
             return (
-              <button key={l.id} className="xnb-runtime-row" onClick={() => setSettingsOpen(true)}>
-                <span className="xnb-dot" data-status={state.status} />
+              <button key={l.id} className="nx-runtime-row" onClick={() => setSettingsOpen(true)}>
+                <span className="nx-dot" data-status={state.status} />
                 <span style={{ flex: 1 }}>{l.label}</span>
-                <span style={{ color: 'var(--nb-fg-faint)' }}>{label}</span>
+                <span style={{ color: 'var(--nx-fg-faint)' }}>{label}</span>
               </button>
             );
           })}
-          <button className="xnb-btn-mini" style={{ alignSelf: 'flex-start', marginTop: 2, marginLeft: -8 }} onClick={() => setSettingsOpen(true)}>
+          <button className="nx-btn-mini" style={{ alignSelf: 'flex-start', marginTop: 2, marginLeft: -8 }} onClick={() => setSettingsOpen(true)}>
             设置…
           </button>
         </div>
       </aside>
 
-      <main className="xnb-main">
-        <div className="xnb-page">
+      <main className="nx-main">
+        <div className="nx-page">
           <input
-            className="xnb-title-input"
+            className="nx-title-input"
             value={nb.title}
             title="笔记标题"
             onChange={(e) => setWs((w) => actions.setTitle(w, e.target.value))}
           />
 
-          <div className="xnb-toolbar">
-            <button className="xnb-btn-primary" onClick={() => void runAll()} disabled={anyRunning}>
+          <div className="nx-toolbar">
+            <button className="nx-btn-primary" onClick={() => void runAll()} disabled={anyRunning}>
               全部运行
             </button>
-            <button className="xnb-btn-ghost" onClick={() => setWs((w) => actions.clearOutputs(w))}>
+            <button className="nx-btn-ghost" onClick={() => setWs((w) => actions.clearOutputs(w))}>
               清空输出
             </button>
-            <button className="xnb-btn-ghost" onClick={() => exportMarkdown(findNotebook(wsRef.current))}>
+            <button className="nx-btn-ghost" onClick={() => exportMarkdown(findNotebook(wsRef.current))}>
               导出 Markdown
             </button>
-            <button className="xnb-btn-ghost" onClick={() => exportIpynb(findNotebook(wsRef.current))}>
+            <button className="nx-btn-ghost" onClick={() => exportIpynb(findNotebook(wsRef.current))}>
               导出 ipynb
             </button>
-            <button className="xnb-btn-ghost" onClick={() => void doImport()}>
+            <button className="nx-btn-ghost" onClick={() => void doImport()}>
               导入…
             </button>
             <span style={{ flex: 1 }} />
-            <span className="xnb-hint">Shift+Enter 运行 · 双击文本编辑 · 拖 ⠿ 排序</span>
+            <span className="nx-hint">Shift+Enter 运行 · 双击文本编辑 · 拖 ⠿ 排序</span>
           </div>
 
           {nb.cells.map((cell, i) => (
@@ -352,12 +352,12 @@ export function App() {
               setDropId(null);
             }}
           >
-            <div className="xnb-dropline" data-active={!!dragId && dropId === 'end'} />
-            <div className="xnb-add-row">
-              <button className="xnb-btn-dashed" onClick={() => insertAfter(null, 'md')}>
+            <div className="nx-dropline" data-active={!!dragId && dropId === 'end'} />
+            <div className="nx-add-row">
+              <button className="nx-btn-dashed" onClick={() => insertAfter(null, 'md')}>
                 ＋ 文本
               </button>
-              <button className="xnb-btn-dashed" onClick={() => insertAfter(null, 'code')}>
+              <button className="nx-btn-dashed" onClick={() => insertAfter(null, 'code')}>
                 ＋ 代码
               </button>
             </div>

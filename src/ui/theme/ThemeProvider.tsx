@@ -5,7 +5,7 @@ export interface ThemePack {
   id: string;
   name: string;
   appearance: 'light' | 'dark';
-  /** key 是去掉 --nb- 前缀的 token 名，如 bg / fg / syn-keyword */
+  /** key 是去掉 --nx- 前缀的 token 名，如 bg / fg / syn-keyword */
   tokens: Record<string, string>;
   fonts?: Partial<Record<'body' | 'heading' | 'mono', string>>;
   /** 附加 CSS，用于覆盖排版细节 */
@@ -27,9 +27,9 @@ interface ThemeContextValue {
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
-const MODE_KEY = 'xnb.theme.mode';
-const PACK_KEY = 'xnb.theme.pack';
-const STYLE_ID = 'xnb-theme-pack';
+const MODE_KEY = 'nx.theme.mode';
+const PACK_KEY = 'nx.theme.pack';
+const STYLE_ID = 'nx-theme-pack';
 
 function applyPack(pack: ThemePack | null) {
   let el = document.getElementById(STYLE_ID) as HTMLStyleElement | null;
@@ -43,10 +43,10 @@ function applyPack(pack: ThemePack | null) {
     document.head.appendChild(el);
   }
   const vars = Object.entries(pack.tokens)
-    .map(([k, v]) => `  --nb-${k}: ${v};`)
+    .map(([k, v]) => `  --nx-${k}: ${v};`)
     .join('\n');
   const fonts = Object.entries(pack.fonts ?? {})
-    .map(([k, v]) => `  --nb-font-${k}: ${v};`)
+    .map(([k, v]) => `  --nx-font-${k}: ${v};`)
     .join('\n');
   el.textContent = `:root[data-pack="${pack.id}"] {\n${vars}\n${fonts}\n}\n${pack.css ?? ''}`;
 }

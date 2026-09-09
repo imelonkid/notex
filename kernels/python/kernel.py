@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""xnotebook Python 内核
+"""NoteX Python 内核
 
 协议：JSON Lines over stdio，每条协议消息以 RS (U+001E) 开头。
 启动：python3 kernel.py   （Python 3.8+，仅用标准库）

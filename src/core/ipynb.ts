@@ -118,7 +118,7 @@ export function notebookToIpynb(nb: Notebook): string {
       cell_type: 'code',
       execution_count: cell.execN ?? null,
       // 保留每个 cell 的语言，回读时才能还原混合语言的笔记
-      metadata: { xnotebook: { lang: cell.lang } },
+      metadata: { notex: { lang: cell.lang } },
       source: toLines(cell.source),
       outputs: cell.outputs
         .map((o) => outputToIpynb(o, cell.execN))
@@ -131,7 +131,7 @@ export function notebookToIpynb(nb: Notebook): string {
     metadata: {
       kernelspec: KERNELSPEC[dominant],
       language_info: LANGUAGE_INFO[dominant],
-      xnotebook: { version: 1, title: nb.title },
+      notex: { version: 1, title: nb.title },
     },
     nbformat: 4,
     nbformat_minor: 5,
@@ -154,7 +154,7 @@ export function ipynbToNotebook(text: string, fallbackTitle = '导入的笔记')
       continue;
     }
     if (raw.cell_type !== 'code') continue;
-    const lang: LangId = LANG_FROM_IPYNB[String(raw?.metadata?.xnotebook?.lang ?? '')] ?? docLang;
+    const lang: LangId = LANG_FROM_IPYNB[String(raw?.metadata?.notex?.lang ?? raw?.metadata?.xnotebook?.lang ?? '')] ?? docLang;
     cells.push({
       id: uid('c'),
       type: 'code',
@@ -171,7 +171,7 @@ export function ipynbToNotebook(text: string, fallbackTitle = '导入的笔记')
   const now = new Date().toISOString();
   return {
     id: uid('nb'),
-    title: String(doc?.metadata?.xnotebook?.title ?? fallbackTitle),
+    title: String(doc?.metadata?.notex?.title ?? doc?.metadata?.xnotebook?.title ?? fallbackTitle),
     cells: cells.length ? cells : [{ id: uid('c'), type: 'md', source: '' }],
     counter: cells.reduce((max, c) => (c.type === 'code' ? Math.max(max, c.execN ?? 0) : max), 0),
     created: now,

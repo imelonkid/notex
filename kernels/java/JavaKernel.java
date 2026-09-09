@@ -1,4 +1,4 @@
-// xnotebook Java 内核
+// NoteX Java 内核
 // 协议：JSON Lines over stdio，每条协议消息以 RS (U+001E) 开头。
 // 启动：java JavaKernel.java   （JDK 11+ 源码启动器，免编译；需 JDK 而非 JRE）
 import java.io.*;
@@ -24,7 +24,7 @@ public class JavaKernel {
     /** 调用注入的渲染器时置位，避免对渲染结果本身再次渲染 */
     volatile boolean rendering = false;
     final ExecutorService worker = Executors.newSingleThreadExecutor(r -> {
-        Thread t = new Thread(r, "xnb-exec");
+        Thread t = new Thread(r, "notex-exec");
         t.setDaemon(true);
         return t;
     });
@@ -121,7 +121,7 @@ public class JavaKernel {
      * 返回 "mime,payload" 的 Base64，无可渲染内容时返回 null。
      */
     static final String RENDERER_SOURCE = """
-        public class __XnbRender {
+        public class __NoteXRender {
             static final int MAX_ROWS = 200;
 
             public static String render(Object o) {
@@ -224,7 +224,7 @@ public class JavaKernel {
         if (varName == null || varName.isBlank() || rendering) return null;
         rendering = true;
         try {
-            List<SnippetEvent> events = shell.eval("__XnbRender.render(" + varName + ")");
+            List<SnippetEvent> events = shell.eval("__NoteXRender.render(" + varName + ")");
             for (SnippetEvent ev : events) {
                 if (ev.exception() != null || ev.value() == null) continue;
                 String literal = ev.value();

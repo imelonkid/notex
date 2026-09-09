@@ -1,4 +1,4 @@
-# xnotebook
+# NoteX
 
 本地优先的可执行笔记。Markdown 写笔记，代码 cell 可在 **Java / Python / JavaScript** 之间用 tab 切换并执行。
 UI 支持主题扩展；运行时自动识别本机环境，缺失时给出安装引导。
@@ -25,7 +25,7 @@ pnpm dev
 - Java 依赖注入：`//DEPS` 声明，有 Maven 就做完整传递解析
 - 运行时自动探测：手动指定 → 环境变量 → PATH → sdkman / pyenv / conda / nvm / volta
 - 缺失环境时在 cell 内展示安装引导卡片，含按平台的一键复制命令
-- 浅色 / 深色 / 跟随系统，主题包可放在 `~/.xnotebook/themes/`
+- 浅色 / 深色 / 跟随系统，主题包可放在 `~/.notex/themes/`
 - 导入导出 Markdown 与 ipynb，混合语言笔记可完整往返
 
 尚未完成：Tauri 桌面壳（目前通过 `pnpm dev` 在浏览器中使用）。
@@ -84,11 +84,11 @@ node kernels/test-kernel.mjs java
 //DEPS com.google.guava:guava:33.0.0-jre
 
 import org.apache.commons.lang3.StringUtils;
-StringUtils.reverse("xnotebook")
+StringUtils.reverse("NoteX")
 ```
 
 装了 Maven 就用它做完整的传递依赖解析；没装则只下载显式声明的 jar，
-并在输出里说明不含传递依赖。下载的 jar 缓存在 `~/.xnotebook/deps/`。
+并在输出里说明不含传递依赖。下载的 jar 缓存在 `~/.notex/deps/`。
 
 ## 运行时要求
 
@@ -114,9 +114,9 @@ StringUtils.reverse("xnotebook")
 }
 ```
 
-放进项目的 `themes/` 或用户的 `~/.xnotebook/themes/` 即被自动加载，在设置里切换。
+放进项目的 `themes/` 或用户的 `~/.notex/themes/` 即被自动加载，在设置里切换。
 两处同 id 时用户目录优先。主题包可以附带一个 CSS 文件，在 `css` 字段里写文件名。组件不写死任何颜色，
-CodeMirror 高亮与 Markdown 代码块共用同一组 `--nb-syn-*` 变量，三处配色永远一致。
+CodeMirror 高亮与 Markdown 代码块共用同一组 `--nx-syn-*` 变量，三处配色永远一致。
 
 ## 布局与快捷键
 

@@ -181,7 +181,7 @@ test('missing-runtime 不写进交换格式', () => {
   assert.equal(doc.cells[0].outputs.length, 0);
 });
 
-test('外部 ipynb（无 xnotebook 元数据）按 kernelspec 判定语言', () => {
+test('外部 ipynb（无 NoteX 元数据）按 kernelspec 判定语言', () => {
   const foreign = JSON.stringify({
     nbformat: 4,
     nbformat_minor: 5,

@@ -5,15 +5,15 @@ import { InstallGuideCard } from './InstallGuideCard';
 /** 富输出渲染：按 MIME 优先级挑一种展示 */
 function RichData({ data }: { data: Record<string, string> }) {
   if (data['image/png']) {
-    return <img className="xnb-out-html" src={`data:image/png;base64,${data['image/png']}`} alt="输出图像" />;
+    return <img className="nx-out-html" src={`data:image/png;base64,${data['image/png']}`} alt="输出图像" />;
   }
   if (data['image/svg+xml']) {
-    return <div className="xnb-out-html" dangerouslySetInnerHTML={{ __html: data['image/svg+xml'] }} />;
+    return <div className="nx-out-html" dangerouslySetInnerHTML={{ __html: data['image/svg+xml'] }} />;
   }
   if (data['text/html']) {
-    return <div className="xnb-out-html" dangerouslySetInnerHTML={{ __html: data['text/html'] }} />;
+    return <div className="nx-out-html" dangerouslySetInnerHTML={{ __html: data['text/html'] }} />;
   }
-  return <div className="xnb-out-line xnb-out-result">→ {data['text/plain'] ?? ''}</div>;
+  return <div className="nx-out-line nx-out-result">→ {data['text/plain'] ?? ''}</div>;
 }
 
 interface Props {
@@ -37,12 +37,12 @@ export function Outputs({ outputs, lang, ranWith, onRetryDetect, onOpenSettings 
   const staleLang = ranWith && ranWith !== lang ? LANGS.find((l) => l.id === ranWith)?.label : null;
 
   return (
-    <div className="xnb-outputs">
-      {staleLang && <div className="xnb-out-stale">上次以 {staleLang} 运行</div>}
+    <div className="nx-outputs">
+      {staleLang && <div className="nx-out-stale">上次以 {staleLang} 运行</div>}
       {outputs.map((out, i) => {
         if (out.type === 'stream') {
           return (
-            <div key={i} className={`xnb-out-line xnb-out-${out.name}`}>
+            <div key={i} className={`nx-out-line nx-out-${out.name}`}>
               {out.text.replace(/\n$/, '')}
             </div>
           );
@@ -54,8 +54,8 @@ export function Outputs({ outputs, lang, ranWith, onRetryDetect, onOpenSettings 
           return (
             <div
               key={i}
-              className="xnb-out-line"
-              style={{ color: out.level === 'warn' ? 'var(--nb-warn)' : 'var(--nb-fg-muted)' }}
+              className="nx-out-line"
+              style={{ color: out.level === 'warn' ? 'var(--nx-warn)' : 'var(--nx-fg-muted)' }}
             >
               {out.text}
             </div>
@@ -64,11 +64,11 @@ export function Outputs({ outputs, lang, ranWith, onRetryDetect, onOpenSettings 
         if (out.type === 'error') {
           return (
             <div key={i}>
-              <div className="xnb-out-line xnb-out-error">
+              <div className="nx-out-line nx-out-error">
                 {out.ename}: {out.evalue}
               </div>
               {out.traceback.length > 0 && (
-                <div className="xnb-out-line xnb-out-trace">{out.traceback.join('\n')}</div>
+                <div className="nx-out-line nx-out-trace">{out.traceback.join('\n')}</div>
               )}
             </div>
           );

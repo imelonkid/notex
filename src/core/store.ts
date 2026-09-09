@@ -13,18 +13,18 @@ import {
   uid,
 } from './model';
 
-const KEY = 'xnotebook.workspace.v1';
+const KEY = 'notex.workspace.v1';
 
 function seed(): Workspace {
   const nb: Notebook = {
     id: 'nb-welcome',
-    title: '欢迎使用 xnotebook',
+    title: '欢迎使用 NoteX',
     counter: 0,
     created: new Date().toISOString(),
     updated: new Date().toISOString(),
     cells: [
       newMarkdownCell(
-        '# 欢迎使用 xnotebook\n\n' +
+        '# 欢迎使用 NoteX\n\n' +
           '文本用 Markdown 书写，代码直接在页面里运行。点代码块上的**运行**试试。\n\n' +
           '- 双击文本 cell 进入编辑，`Shift+Enter` 完成\n' +
           '- 代码 cell 里 `Shift+Enter` 运行，运行中按**中断**可以停下来\n' +
@@ -82,7 +82,7 @@ function seed(): Workspace {
         'java',
         '//DEPS org.apache.commons:commons-lang3:3.14.0\n\n' +
           'import org.apache.commons.lang3.StringUtils;\n' +
-          'System.out.println(StringUtils.reverse("xnotebook"));\n' +
+          'System.out.println(StringUtils.reverse("NoteX"));\n' +
           'StringUtils.capitalize("来自 maven 的依赖")',
       ),
       newMarkdownCell(
@@ -95,7 +95,7 @@ function seed(): Workspace {
         '## 还能做什么\n\n' +
           '- 左下角能看到三种运行时的状态，点开是设置：切换主题、手动指定运行时路径、重启内核\n' +
           '- 上方可以导出 Markdown 或 ipynb，也能把它们导入回来\n' +
-          '- 把主题包 JSON 放进 `~/.xnotebook/themes/` 就会自动出现在设置里',
+          '- 把主题包 JSON 放进 `~/.notex/themes/` 就会自动出现在设置里',
       ),
     ],
   };

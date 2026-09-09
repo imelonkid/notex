@@ -104,7 +104,7 @@ function check(name, ok, detail) {
 
 const CASES = {
   java: {
-    hello: 'System.out.println("你好, xnotebook");\nint a = 6 * 7;\na',
+    hello: 'System.out.println("你好, NoteX");\nint a = 6 * 7;\na',
     stateA: 'var nums = new java.util.ArrayList<Integer>();\nfor (int i = 1; i <= 5; i++) nums.add(i * i);',
     stateB: 'nums.stream().mapToInt(Integer::intValue).sum()',
     boom: 'int z = 1 / 0;',
@@ -115,7 +115,7 @@ const CASES = {
     interrupt: 'protocol',
   },
   python: {
-    hello: 'print("你好, xnotebook")\n6 * 7',
+    hello: 'print("你好, NoteX")\n6 * 7',
     stateA: 'nums = [i * i for i in range(1, 6)]',
     stateB: 'sum(nums)',
     boom: '1 / 0',
@@ -126,7 +126,7 @@ const CASES = {
     interrupt: 'signal',
   },
   js: {
-    hello: 'console.log("你好, xnotebook");\n6 * 7',
+    hello: 'console.log("你好, NoteX");\n6 * 7',
     stateA: 'globalThis.nums = [1,2,3,4,5].map(i => i * i);',
     stateB: 'nums.reduce((a, b) => a + b, 0)',
     boom: 'null.x',

@@ -4,7 +4,7 @@ import { connectStdioKernel, firstWorking } from './stdioKernel';
 
 /** 收集一种语言的候选可执行文件：手动指定 → 环境变量 → PATH → 版本管理器目录 */
 function manualPathFor(lang: 'java' | 'python' | 'js'): string | null {
-  return localStorage.getItem(`xnb.runtime.path.${lang}`);
+  return localStorage.getItem(`nx.runtime.path.${lang}`);
 }
 
 async function candidatesFor(host: HostBridge, lang: 'java' | 'python' | 'js'): Promise<string[]> {

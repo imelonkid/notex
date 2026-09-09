@@ -31,7 +31,7 @@ interface Props {
 }
 
 function renderMarkdown(src: string): string {
-  if (!src.trim()) return '<p class="nb-md-empty">（空文本 — 双击编辑）</p>';
+  if (!src.trim()) return '<p class="nx-md-empty">（空文本 — 双击编辑）</p>';
   try {
     return marked.parse(src, { breaks: true, gfm: true, async: false }) as string;
   } catch {
@@ -45,7 +45,7 @@ function LangTabs({ current, onPick }: { current: LangId; onPick(l: LangId): voi
   void revision;
 
   return (
-    <div className="xnb-langtabs" role="tablist">
+    <div className="nx-langtabs" role="tablist">
       {LANGS.map((l) => {
         const state = registry.get(l.id);
         const title =
@@ -63,12 +63,12 @@ function LangTabs({ current, onPick }: { current: LangId; onPick(l: LangId): voi
             key={l.id}
             role="tab"
             aria-selected={l.id === current}
-            className="xnb-langtab"
+            className="nx-langtab"
             data-active={l.id === current}
             title={title}
             onClick={() => onPick(l.id)}
           >
-            <span className="xnb-dot" data-status={state.status} />
+            <span className="nx-dot" data-status={state.status} />
             {l.short}
           </button>
         );
@@ -102,11 +102,11 @@ export function Cell(props: Props) {
       }}
       style={{ position: 'relative' }}
     >
-      <div className="xnb-dropline" data-active={dropActive} />
-      <div className="xnb-cell">
-        <div className="xnb-gutter">
+      <div className="nx-dropline" data-active={dropActive} />
+      <div className="nx-cell">
+        <div className="nx-gutter">
           <span
-            className="xnb-grip"
+            className="nx-grip"
             draggable
             title="拖动排序"
             onDragStart={props.onDragStart}
@@ -114,30 +114,30 @@ export function Cell(props: Props) {
           >
             ⠿
           </span>
-          {isCode && showExecN && <span className="xnb-execn">{badge}</span>}
+          {isCode && showExecN && <span className="notex-execn">{badge}</span>}
         </div>
 
         <div style={{ minWidth: 0 }}>
-          <div className="xnb-cell-bar">
+          <div className="nx-cell-bar">
             {isCode ? (
               <>
                 <LangTabs current={cell.lang} onPick={props.onLang} />
                 {running ? (
-                  <button className="xnb-btn-run" onClick={props.onInterrupt}>
+                  <button className="nx-btn-run" onClick={props.onInterrupt}>
                     中断
                   </button>
                 ) : (
-                  <button className="xnb-btn-run" onClick={props.onRun}>
+                  <button className="nx-btn-run" onClick={props.onRun}>
                     运行
                   </button>
                 )}
               </>
             ) : (
               <>
-                <span className="xnb-badge">MARKDOWN</span>
+                <span className="nx-badge">MARKDOWN</span>
                 {editing ? (
                   <button
-                    className="xnb-btn-primary"
+                    className="nx-btn-primary"
                     style={{ fontSize: '11.5px', padding: '3px 14px' }}
                     onClick={() => {
                       props.onSource(mdDraft);
@@ -148,8 +148,8 @@ export function Cell(props: Props) {
                   </button>
                 ) : (
                   <button
-                    className="xnb-btn-mini"
-                    style={{ border: '1px solid var(--nb-border-strong)' }}
+                    className="nx-btn-mini"
+                    style={{ border: '1px solid var(--nx-border-strong)' }}
                     onClick={() => {
                       setMdDraft(cell.source);
                       props.onEdit();
@@ -161,13 +161,13 @@ export function Cell(props: Props) {
               </>
             )}
             <span style={{ flex: 1 }} />
-            <button className="xnb-btn-mini" title="在下方插入文本" onClick={() => props.onInsert('md')}>
+            <button className="nx-btn-mini" title="在下方插入文本" onClick={() => props.onInsert('md')}>
               ＋文本
             </button>
-            <button className="xnb-btn-mini" title="在下方插入代码" onClick={() => props.onInsert('code')}>
+            <button className="nx-btn-mini" title="在下方插入代码" onClick={() => props.onInsert('code')}>
               ＋代码
             </button>
-            <button className="xnb-btn-mini" data-danger="true" title="删除此 cell" onClick={props.onRemove}>
+            <button className="nx-btn-mini" data-danger="true" title="删除此 cell" onClick={props.onRemove}>
               ×
             </button>
           </div>
@@ -183,7 +183,7 @@ export function Cell(props: Props) {
                 getSession={() => registry.get(cell.lang).session ?? null}
               />
               {running && (
-                <div className="xnb-outputs" style={{ color: 'var(--nb-fg-muted)' }}>
+                <div className="nx-outputs" style={{ color: 'var(--nx-fg-muted)' }}>
                   {busyNote ?? (registry.get(cell.lang).status === 'starting' ? '正在启动内核…' : '运行中…')}
                 </div>
               )}
@@ -200,7 +200,7 @@ export function Cell(props: Props) {
           ) : editing ? (
             <>
               <textarea
-                className="xnb-md-editor"
+                className="nx-md-editor"
                 autoFocus
                 value={mdDraft}
                 rows={Math.max(3, mdDraft.split('\n').length + 1)}
@@ -217,18 +217,18 @@ export function Cell(props: Props) {
                   }
                 }}
               />
-              <div style={{ fontSize: '11px', color: 'var(--nb-fg-faint)', margin: '8px 2px 4px' }}>
+              <div style={{ fontSize: '11px', color: 'var(--nx-fg-faint)', margin: '8px 2px 4px' }}>
                 实时预览 · Shift+Enter 完成
               </div>
               <div
-                className="nb-md"
+                className="nx-md"
                 dangerouslySetInnerHTML={{ __html: html }}
-                style={{ padding: '2px 0 2px 14px', borderLeft: '2px solid var(--nb-border)' }}
+                style={{ padding: '2px 0 2px 14px', borderLeft: '2px solid var(--nx-border)' }}
               />
             </>
           ) : (
             <div
-              className="nb-md"
+              className="nx-md"
               onDoubleClick={() => {
                 setMdDraft(cell.source);
                 props.onEdit();

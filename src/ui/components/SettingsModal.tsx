@@ -44,13 +44,13 @@ export function SettingsModal({ onClose }: { onClose(): void }) {
   };
 
   return (
-    <div className="xnb-modal-backdrop" onClick={onClose}>
-      <div className="xnb-modal" onClick={(e) => e.stopPropagation()}>
+    <div className="nx-modal-backdrop" onClick={onClose}>
+      <div className="nx-modal" onClick={(e) => e.stopPropagation()}>
         <h2>设置</h2>
 
-        <div className="xnb-field">
-          <div className="xnb-field-label">外观</div>
-          <div className="xnb-seg">
+        <div className="nx-field">
+          <div className="nx-field-label">外观</div>
+          <div className="nx-seg">
             {(['light', 'dark', 'auto'] as ThemeMode[]).map((m) => (
               <button key={m} data-active={mode === m} onClick={() => setMode(m)}>
                 {MODE_LABEL[m]}
@@ -60,9 +60,9 @@ export function SettingsModal({ onClose }: { onClose(): void }) {
         </div>
 
         {packs.length > 0 && (
-          <div className="xnb-field">
-            <div className="xnb-field-label">主题包</div>
-            <div className="xnb-seg">
+          <div className="nx-field">
+            <div className="nx-field-label">主题包</div>
+            <div className="nx-seg">
               <button data-active={packId === null} onClick={() => setPack(null)}>
                 默认
               </button>
@@ -75,16 +75,16 @@ export function SettingsModal({ onClose }: { onClose(): void }) {
           </div>
         )}
 
-        <div className="xnb-field">
-          <div className="xnb-field-label" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div className="nx-field">
+          <div className="nx-field-label" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             运行时
-            <button className="xnb-btn-mini" onClick={redetectAll} disabled={detecting}>
+            <button className="nx-btn-mini" onClick={redetectAll} disabled={detecting}>
               {detecting ? '检测中…' : '全部重新检测'}
             </button>
           </div>
 
           {!host.canSpawn && (
-            <div className="xnb-install-note" style={{ marginBottom: 12 }}>
+            <div className="nx-install-note" style={{ marginBottom: 12 }}>
               当前以纯浏览器模式运行，无法启动本机进程。用 <code>pnpm dev</code> 启动可获得本机内核。
             </div>
           )}
@@ -94,29 +94,29 @@ export function SettingsModal({ onClose }: { onClose(): void }) {
             return (
               <div key={l.id} style={{ marginBottom: 14 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
-                  <span className="xnb-dot" data-status={state.status} />
+                  <span className="nx-dot" data-status={state.status} />
                   <span style={{ fontSize: 13, fontWeight: 500 }}>{l.label}</span>
-                  <span style={{ fontSize: 11.5, color: 'var(--nb-fg-faint)' }}>
+                  <span style={{ fontSize: 11.5, color: 'var(--nx-fg-faint)' }}>
                     {STATUS_LABEL[state.status] ?? state.status}
                     {state.info?.version ? ` · ${state.info.version}` : ''}
                   </span>
                   {state.session?.alive && (
-                    <button className="xnb-btn-mini" onClick={() => void registry.restart(l.id)}>
+                    <button className="nx-btn-mini" onClick={() => void registry.restart(l.id)}>
                       重启内核
                     </button>
                   )}
                 </div>
                 <input
-                  className="xnb-text-input"
+                  className="nx-text-input"
                   placeholder={state.info?.path ?? `手动指定 ${l.label} 可执行文件路径（留空则自动检测）`}
                   value={paths[l.id] ?? ''}
                   onChange={(e) => setPaths((p) => ({ ...p, [l.id]: e.target.value }))}
                   onBlur={() => void applyPath(l.id)}
                   onKeyDown={(e) => e.key === 'Enter' && void applyPath(l.id)}
                 />
-                {state.info?.path && <div className="xnb-runtime-detail">{state.info.path}</div>}
+                {state.info?.path && <div className="nx-runtime-detail">{state.info.path}</div>}
                 {state.error && (
-                  <div className="xnb-runtime-detail" style={{ color: 'var(--nb-danger)' }}>
+                  <div className="nx-runtime-detail" style={{ color: 'var(--nx-danger)' }}>
                     {state.error}
                   </div>
                 )}
@@ -126,7 +126,7 @@ export function SettingsModal({ onClose }: { onClose(): void }) {
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-          <button className="xnb-btn-primary" onClick={onClose}>
+          <button className="nx-btn-primary" onClick={onClose}>
             关闭
           </button>
         </div>

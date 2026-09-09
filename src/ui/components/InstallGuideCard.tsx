@@ -41,24 +41,24 @@ export function InstallGuideCard({ lang, onRetryDetect, onOpenSettings }: Props)
   };
 
   return (
-    <div className="xnb-install">
-      <div className="xnb-install-title">{guide.title}</div>
-      <div className="xnb-install-sub">需要 {guide.minVersion}</div>
+    <div className="nx-install">
+      <div className="nx-install-title">{guide.title}</div>
+      <div className="nx-install-sub">需要 {guide.minVersion}</div>
 
       {command && (
-        <div className="xnb-install-cmd">
+        <div className="nx-install-cmd">
           <code>{command}</code>
-          <button className="xnb-btn-mini" onClick={copy}>
+          <button className="nx-btn-mini" onClick={copy}>
             {copied ? '已复制' : '复制'}
           </button>
         </div>
       )}
 
-      <div className="xnb-install-actions">
-        <button className="xnb-btn-primary" onClick={retry} disabled={detecting}>
+      <div className="nx-install-actions">
+        <button className="nx-btn-primary" onClick={retry} disabled={detecting}>
           {detecting ? '检测中…' : '重新检测'}
         </button>
-        <button className="xnb-btn-ghost" onClick={onOpenSettings}>
+        <button className="nx-btn-ghost" onClick={onOpenSettings}>
           手动指定路径…
         </button>
         {guide.links.map((link) => (
@@ -75,7 +75,7 @@ export function InstallGuideCard({ lang, onRetryDetect, onOpenSettings }: Props)
       </div>
 
       {guide.notes?.length ? (
-        <div className="xnb-install-note">
+        <div className="nx-install-note">
           {guide.notes.map((n, i) => (
             <div key={i}>· {n}</div>
           ))}

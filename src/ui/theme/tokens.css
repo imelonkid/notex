@@ -5,134 +5,134 @@
 
 :root {
   /* 表面 */
-  --nb-bg: #fdfdfc;
-  --nb-bg-subtle: #f7f7f4;
-  --nb-bg-hover: #f2f2ee;
-  --nb-bg-active: #f0f0ec;
-  --nb-border: #e6e6e1;
-  --nb-border-strong: #d8d8d2;
+  --nx-bg: #fdfdfc;
+  --nx-bg-subtle: #f7f7f4;
+  --nx-bg-hover: #f2f2ee;
+  --nx-bg-active: #f0f0ec;
+  --nx-border: #e6e6e1;
+  --nx-border-strong: #d8d8d2;
 
   /* 文字 */
-  --nb-fg: #1c1c1a;
-  --nb-fg-soft: #3a3a36;
-  --nb-fg-muted: #6f6f6a;
-  --nb-fg-faint: #a3a39c;
-  --nb-fg-ghost: #c2c2bb;
-  --nb-fg-invert: #fdfdfc;
+  --nx-fg: #1c1c1a;
+  --nx-fg-soft: #3a3a36;
+  --nx-fg-muted: #6f6f6a;
+  --nx-fg-faint: #a3a39c;
+  --nx-fg-ghost: #c2c2bb;
+  --nx-fg-invert: #fdfdfc;
 
   /* 语义色 */
-  --nb-accent: #3f5a7d;
-  --nb-danger: #9c3423;
-  --nb-warn: #8a6d1f;
-  --nb-success: #4b7d5b;
-  --nb-selection: #e8e8e2;
+  --nx-accent: #3f5a7d;
+  --nx-danger: #9c3423;
+  --nx-warn: #8a6d1f;
+  --nx-success: #4b7d5b;
+  --nx-selection: #e8e8e2;
 
   /* 字体 */
-  --nb-font-body: 'Helvetica Neue', Helvetica, Arial, 'PingFang SC', 'Microsoft YaHei', sans-serif;
-  --nb-font-heading: 'Newsreader', Georgia, 'Songti SC', serif;
-  --nb-font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-  --nb-font-size: 13.5px;
-  --nb-font-size-code: 13px;
-  --nb-font-size-prose: 16px;
+  --nx-font-body: 'Helvetica Neue', Helvetica, Arial, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --nx-font-heading: 'Newsreader', Georgia, 'Songti SC', serif;
+  --nx-font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --nx-font-size: 13.5px;
+  --nx-font-size-code: 13px;
+  --nx-font-size-prose: 16px;
 
   /* 形状与尺寸 */
-  --nb-radius: 4px;
-  --nb-radius-sm: 3px;
-  --nb-content-width: 1600px;
-  --nb-page-pad-x: 28px;
-  --nb-page-pad-top: 28px;
-  --nb-gutter-width: 40px;
-  --nb-sidebar-width: 230px;
+  --nx-radius: 4px;
+  --nx-radius-sm: 3px;
+  --nx-content-width: 1600px;
+  --nx-page-pad-x: 28px;
+  --nx-page-pad-top: 28px;
+  --nx-gutter-width: 40px;
+  --nx-sidebar-width: 230px;
 
   /* 代码高亮 */
-  --nb-syn-keyword: #7c3aed;
-  --nb-syn-string: #15803d;
-  --nb-syn-comment: #8a8a84;
-  --nb-syn-number: #b45309;
-  --nb-syn-type: #0e7490;
-  --nb-syn-function: #1d4ed8;
-  --nb-syn-variable: #1c1c1a;
-  --nb-syn-operator: #6f6f6a;
-  --nb-syn-punct: #6f6f6a;
+  --nx-syn-keyword: #7c3aed;
+  --nx-syn-string: #15803d;
+  --nx-syn-comment: #8a8a84;
+  --nx-syn-number: #b45309;
+  --nx-syn-type: #0e7490;
+  --nx-syn-function: #1d4ed8;
+  --nx-syn-variable: #1c1c1a;
+  --nx-syn-operator: #6f6f6a;
+  --nx-syn-punct: #6f6f6a;
 
   /* 编辑器 */
-  --nb-editor-bg: var(--nb-bg-subtle);
-  --nb-editor-caret: var(--nb-fg);
-  --nb-editor-selection: #d6e2f0;
-  --nb-editor-active-line: rgba(0, 0, 0, 0.025);
-  --nb-editor-gutter: var(--nb-fg-ghost);
+  --nx-editor-bg: var(--nx-bg-subtle);
+  --nx-editor-caret: var(--nx-fg);
+  --nx-editor-selection: #d6e2f0;
+  --nx-editor-active-line: rgba(0, 0, 0, 0.025);
+  --nx-editor-gutter: var(--nx-fg-ghost);
 }
 
 /* 深色：只覆盖需要变的 token */
 :root[data-theme='dark'] {
-  --nb-bg: #1a1a18;
-  --nb-bg-subtle: #212120;
-  --nb-bg-hover: #282826;
-  --nb-bg-active: #2f2f2c;
-  --nb-border: #33332f;
-  --nb-border-strong: #45453f;
+  --nx-bg: #1a1a18;
+  --nx-bg-subtle: #212120;
+  --nx-bg-hover: #282826;
+  --nx-bg-active: #2f2f2c;
+  --nx-border: #33332f;
+  --nx-border-strong: #45453f;
 
-  --nb-fg: #e8e8e2;
-  --nb-fg-soft: #d0d0c8;
-  --nb-fg-muted: #a0a098;
-  --nb-fg-faint: #75756e;
-  --nb-fg-ghost: #55554f;
-  --nb-fg-invert: #1a1a18;
+  --nx-fg: #e8e8e2;
+  --nx-fg-soft: #d0d0c8;
+  --nx-fg-muted: #a0a098;
+  --nx-fg-faint: #75756e;
+  --nx-fg-ghost: #55554f;
+  --nx-fg-invert: #1a1a18;
 
-  --nb-accent: #8fb3d9;
-  --nb-danger: #e08b7a;
-  --nb-warn: #d4b062;
-  --nb-success: #86c19b;
-  --nb-selection: #3a3a34;
+  --nx-accent: #8fb3d9;
+  --nx-danger: #e08b7a;
+  --nx-warn: #d4b062;
+  --nx-success: #86c19b;
+  --nx-selection: #3a3a34;
 
-  --nb-syn-keyword: #c4a2f5;
-  --nb-syn-string: #9ed9ab;
-  --nb-syn-comment: #75756e;
-  --nb-syn-number: #f0b464;
-  --nb-syn-type: #7fd3e0;
-  --nb-syn-function: #93bdf5;
-  --nb-syn-variable: #e8e8e2;
-  --nb-syn-operator: #a0a098;
-  --nb-syn-punct: #a0a098;
+  --nx-syn-keyword: #c4a2f5;
+  --nx-syn-string: #9ed9ab;
+  --nx-syn-comment: #75756e;
+  --nx-syn-number: #f0b464;
+  --nx-syn-type: #7fd3e0;
+  --nx-syn-function: #93bdf5;
+  --nx-syn-variable: #e8e8e2;
+  --nx-syn-operator: #a0a098;
+  --nx-syn-punct: #a0a098;
 
-  --nb-editor-selection: #3a4a5e;
-  --nb-editor-active-line: rgba(255, 255, 255, 0.03);
+  --nx-editor-selection: #3a4a5e;
+  --nx-editor-active-line: rgba(255, 255, 255, 0.03);
 }
 
 /* auto：跟随系统，且不被显式的 light 覆盖 */
 @media (prefers-color-scheme: dark) {
   :root[data-theme='auto'] {
-    --nb-bg: #1a1a18;
-    --nb-bg-subtle: #212120;
-    --nb-bg-hover: #282826;
-    --nb-bg-active: #2f2f2c;
-    --nb-border: #33332f;
-    --nb-border-strong: #45453f;
+    --nx-bg: #1a1a18;
+    --nx-bg-subtle: #212120;
+    --nx-bg-hover: #282826;
+    --nx-bg-active: #2f2f2c;
+    --nx-border: #33332f;
+    --nx-border-strong: #45453f;
 
-    --nb-fg: #e8e8e2;
-    --nb-fg-soft: #d0d0c8;
-    --nb-fg-muted: #a0a098;
-    --nb-fg-faint: #75756e;
-    --nb-fg-ghost: #55554f;
-    --nb-fg-invert: #1a1a18;
+    --nx-fg: #e8e8e2;
+    --nx-fg-soft: #d0d0c8;
+    --nx-fg-muted: #a0a098;
+    --nx-fg-faint: #75756e;
+    --nx-fg-ghost: #55554f;
+    --nx-fg-invert: #1a1a18;
 
-    --nb-accent: #8fb3d9;
-    --nb-danger: #e08b7a;
-    --nb-warn: #d4b062;
-    --nb-success: #86c19b;
-    --nb-selection: #3a3a34;
+    --nx-accent: #8fb3d9;
+    --nx-danger: #e08b7a;
+    --nx-warn: #d4b062;
+    --nx-success: #86c19b;
+    --nx-selection: #3a3a34;
 
-    --nb-syn-keyword: #c4a2f5;
-    --nb-syn-string: #9ed9ab;
-    --nb-syn-comment: #75756e;
-    --nb-syn-number: #f0b464;
-    --nb-syn-type: #7fd3e0;
-    --nb-syn-function: #93bdf5;
-    --nb-syn-variable: #e8e8e2;
-    --nb-syn-operator: #a0a098;
-    --nb-syn-punct: #a0a098;
+    --nx-syn-keyword: #c4a2f5;
+    --nx-syn-string: #9ed9ab;
+    --nx-syn-comment: #75756e;
+    --nx-syn-number: #f0b464;
+    --nx-syn-type: #7fd3e0;
+    --nx-syn-function: #93bdf5;
+    --nx-syn-variable: #e8e8e2;
+    --nx-syn-operator: #a0a098;
+    --nx-syn-punct: #a0a098;
 
-    --nb-editor-selection: #3a4a5e;
-    --nb-editor-active-line: rgba(255, 255, 255, 0.03);
+    --nx-editor-selection: #3a4a5e;
+    --nx-editor-active-line: rgba(255, 255, 255, 0.03);
   }
 }

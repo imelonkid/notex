@@ -49,7 +49,7 @@ export function importNotebook(): Promise<Notebook | null> {
           resolve(nb);
         }
       } catch (e) {
-        console.error('[xnotebook] 导入失败', e);
+        console.error('[NoteX] 导入失败', e);
         resolve(null);
       }
     };

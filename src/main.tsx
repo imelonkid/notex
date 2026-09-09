@@ -9,7 +9,7 @@ import { detectHost } from './host/DevServerHost';
 import type { HostBridge } from './host/HostBridge';
 
 /**
- * 加载主题包。优先问宿主，它会合并内置 themes/ 与用户 ~/.xnotebook/themes/；
+ * 加载主题包。优先问宿主，它会合并内置 themes/ 与用户 ~/.notex/themes/；
  * 纯浏览器模式下退回打包进来的内置主题。
  */
 function ThemeLoader({ children }: { children: React.ReactNode }) {
@@ -55,7 +55,7 @@ function Boot() {
 
   if (!host) {
     return (
-      <div style={{ padding: 40, color: 'var(--nb-fg-faint)', fontSize: 13 }}>正在连接宿主…</div>
+      <div style={{ padding: 40, color: 'var(--nx-fg-faint)', fontSize: 13 }}>正在连接宿主…</div>
     );
   }
 
@@ -65,6 +65,31 @@ function Boot() {
     </RuntimeProvider>
   );
 }
+
+/**
+ * 从旧的 xnotebook 命名迁移本地数据，只跑一次。
+ * 不覆盖已存在的新键，避免把用户新改的设置冲掉。
+ */
+function migrateLegacyStorage() {
+  try {
+    const renames: [string, string][] = [];
+    for (let i = 0; i < localStorage.length; i += 1) {
+      const key = localStorage.key(i);
+      if (!key) continue;
+      if (key === 'xnotebook.workspace.v1') renames.push([key, 'notex.workspace.v1']);
+      else if (key.startsWith('xnb.')) renames.push([key, 'nx.' + key.slice(4)]);
+    }
+    for (const [from, to] of renames) {
+      const value = localStorage.getItem(from);
+      if (value !== null && localStorage.getItem(to) === null) localStorage.setItem(to, value);
+      localStorage.removeItem(from);
+    }
+  } catch {
+    /* 无痕模式等场景忽略 */
+  }
+}
+
+migrateLegacyStorage();
 
 const container = document.getElementById('root')!;
 

@@ -58,7 +58,7 @@ async function resolveDeps(coords: string[]): Promise<{
   }
   if (!coords.length) return { classpath: [], resolver: 'direct', warnings };
 
-  const cacheDir = path.join(os.homedir(), '.xnotebook', 'deps');
+  const cacheDir = path.join(os.homedir(), '.notex', 'deps');
   await mkdir(cacheDir, { recursive: true });
 
   // 优先走 mvn：传递依赖、BOM、exclusions 都由它处理，不自己重造
@@ -75,7 +75,7 @@ async function resolveDeps(coords: string[]): Promise<{
     const pom = [
       '<project xmlns="http://maven.apache.org/POM/4.0.0">',
       '<modelVersion>4.0.0</modelVersion>',
-      '<groupId>tech.xnotebook</groupId><artifactId>deps</artifactId>',
+      '<groupId>tech.notex</groupId><artifactId>deps</artifactId>',
       '<version>1</version><packaging>pom</packaging><dependencies>',
       ...coords.map((c) => {
         const [g, a, v, classifier] = c.split(':');
@@ -159,7 +159,7 @@ export function hostPlugin(): Plugin {
   const sessions = new Map<string, Session>();
 
   return {
-    name: 'xnotebook-host',
+    name: 'notex-host',
     configureServer(server: ViteDevServer) {
       const wss = new WebSocketServer({ noServer: true });
 
@@ -286,8 +286,8 @@ export function hostPlugin(): Plugin {
             }
           }
           if (url.pathname === '/themes') {
-            // 内置 themes/ 与用户 ~/.xnotebook/themes/ 合并，用户的同 id 覆盖内置
-            const dirs = [path.join(ROOT, 'themes'), path.join(os.homedir(), '.xnotebook', 'themes')];
+            // 内置 themes/ 与用户 ~/.notex/themes/ 合并，用户的同 id 覆盖内置
+            const dirs = [path.join(ROOT, 'themes'), path.join(os.homedir(), '.notex', 'themes')];
             const packs: unknown[] = [];
             const seen = new Set<string>();
             for (const dir of dirs.reverse()) {
@@ -317,11 +317,11 @@ export function hostPlugin(): Plugin {
                 }
               }
             }
-            return json(res, 200, { packs, userDir: path.join(os.homedir(), '.xnotebook', 'themes') });
+            return json(res, 200, { packs, userDir: path.join(os.homedir(), '.notex', 'themes') });
           }
           if (url.pathname === '/themes/reveal' && req.method === 'POST') {
             // 确保用户主题目录存在，方便用户直接放文件进去
-            const dir = path.join(os.homedir(), '.xnotebook', 'themes');
+            const dir = path.join(os.homedir(), '.notex', 'themes');
             await mkdir(dir, { recursive: true });
             return json(res, 200, { dir });
           }

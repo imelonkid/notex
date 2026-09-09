@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * xnotebook JavaScript 内核
+ * NoteX JavaScript 内核
  *
  * 协议：JSON Lines over stdio，每条协议消息以 RS (U+001E) 开头。
  * 启动：node kernel.mjs   （Node 18+，仅用内置模块）

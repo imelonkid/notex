@@ -13,7 +13,7 @@ export interface LangState {
   error?: string;
 }
 
-const CACHE_KEY = 'xnb.runtimes.v1';
+const CACHE_KEY = 'nx.runtimes.v1';
 
 /**
  * 管理每种语言的运行时：探测、惰性启动、状态广播。
@@ -196,12 +196,12 @@ export class RuntimeRegistry {
 
   /** 用户手动指定可执行文件路径 */
   setManualPath(lang: LangId, path: string | null) {
-    const key = `xnb.runtime.path.${lang}`;
+    const key = `nx.runtime.path.${lang}`;
     if (path) localStorage.setItem(key, path);
     else localStorage.removeItem(key);
   }
 
   getManualPath(lang: LangId): string {
-    return localStorage.getItem(`xnb.runtime.path.${lang}`) ?? '';
+    return localStorage.getItem(`nx.runtime.path.${lang}`) ?? '';
   }
 }

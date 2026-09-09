@@ -62,5 +62,5 @@ export function CodeEditor({ value, lang, onChange, onRun, onFocus, getSession }
     view.current?.dispatch({ effects: langCompartment.reconfigure(langExtension(lang)) });
   }, [lang]);
 
-  return <div ref={host} className="xnb-editor" />;
+  return <div ref={host} className="nx-editor" />;
 }

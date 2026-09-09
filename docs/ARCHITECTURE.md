@@ -1,4 +1,4 @@
-# xnotebook 架构设计
+# NoteX 架构设计
 
 > 目标：一个本地优先的可执行笔记应用。Markdown 写笔记，代码 cell 可在 Java / Python / JS 之间切换并执行。
 > UI 支持主题扩展；运行时内核轻量、自动识别本地环境、缺失时引导安装。
@@ -55,7 +55,7 @@ export interface HostBridge {
   readText(path: string): Promise<string>;
   writeText(path: string, content: string): Promise<void>;
   listDir(path: string): Promise<DirEntry[]>;
-  appDataDir(): Promise<string>;     // ~/.xnotebook
+  appDataDir(): Promise<string>;     // ~/.NoteX
   // 系统
   openExternal(url: string): Promise<void>;
   clipboardWrite(text: string): Promise<void>;
@@ -112,7 +112,7 @@ export interface InstallGuide {
 
 ### 3.2 自动识别策略
 
-探测顺序固定，命中即停，结果缓存到 `~/.xnotebook/runtimes.json`，UI 上提供"重新检测"和"手动指定路径"：
+探测顺序固定，命中即停，结果缓存到 `~/.NoteX/runtimes.json`，UI 上提供"重新检测"和"手动指定路径"：
 
 1. 用户在设置里手动指定的路径
 2. 环境变量：`JAVA_HOME`、`VIRTUAL_ENV`、`CONDA_PREFIX`
@@ -231,7 +231,7 @@ export type Output =
 **存储格式：Markdown 为正本，输出存旁车文件。**
 
 ```
-~/xnotebook/
+~/NoteX/
   我的笔记/
     jshell 入门.md              ← 正文，代码 cell 就是 ```java 围栏块
     .jshell 入门.outputs.json   ← 各 cell 的 outputs，按 cell id 索引
@@ -241,7 +241,7 @@ Markdown 文件示例：
 
 ```markdown
 ---
-xnotebook: 1
+NoteX: 1
 title: jshell 入门
 ---
 
@@ -296,32 +296,32 @@ view.dispatch({ effects: langCompartment.reconfigure(langSupport(cell.lang)) });
 /* packages/ui/src/tokens.css —— 语义层，组件只用这一层 */
 :root {
   /* 表面 */
-  --nb-bg: #fdfdfc;
-  --nb-bg-subtle: #f7f7f4;
-  --nb-bg-hover: #f2f2ee;
-  --nb-border: #e6e6e1;
-  --nb-border-strong: #d8d8d2;
+  --nx-bg: #fdfdfc;
+  --nx-bg-subtle: #f7f7f4;
+  --nx-bg-hover: #f2f2ee;
+  --nx-border: #e6e6e1;
+  --nx-border-strong: #d8d8d2;
   /* 文字 */
-  --nb-fg: #1c1c1a;
-  --nb-fg-muted: #6f6f6a;
-  --nb-fg-faint: #a3a39c;
-  --nb-accent: #3f5a7d;
-  --nb-danger: #9c3423;
-  --nb-warn: #8a6d1f;
-  --nb-success: #4b7d5b;
+  --nx-fg: #1c1c1a;
+  --nx-fg-muted: #6f6f6a;
+  --nx-fg-faint: #a3a39c;
+  --nx-accent: #3f5a7d;
+  --nx-danger: #9c3423;
+  --nx-warn: #8a6d1f;
+  --nx-success: #4b7d5b;
   /* 字体与形状 */
-  --nb-font-body: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-  --nb-font-heading: 'Newsreader', Georgia, serif;
-  --nb-font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-  --nb-radius: 4px;
-  --nb-content-width: 860px;
+  --nx-font-body: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --nx-font-heading: 'Newsreader', Georgia, serif;
+  --nx-font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --nx-radius: 4px;
+  --nx-content-width: 860px;
   /* 代码高亮（供 CodeMirror HighlightStyle 读取） */
-  --nb-syn-keyword: #7c3aed;
-  --nb-syn-string: #15803d;
-  --nb-syn-comment: #8a8a84;
-  --nb-syn-number: #b45309;
-  --nb-syn-type: #0e7490;
-  --nb-syn-function: #1d4ed8;
+  --nx-syn-keyword: #7c3aed;
+  --nx-syn-string: #15803d;
+  --nx-syn-comment: #8a8a84;
+  --nx-syn-number: #b45309;
+  --nx-syn-type: #0e7490;
+  --nx-syn-function: #1d4ed8;
 }
 ```
 
@@ -330,7 +330,7 @@ view.dispatch({ effects: langCompartment.reconfigure(langSupport(cell.lang)) });
 ### 6.3 主题包格式
 
 ```
-~/.xnotebook/themes/
+~/.notex/themes/
   solarized/
     theme.json
     theme.css      (可选)
@@ -347,18 +347,18 @@ view.dispatch({ effects: langCompartment.reconfigure(langSupport(cell.lang)) });
     "syn-keyword": "#859900", "syn-string": "#2aa198"
   },
   "fonts": { "heading": "'Iowan Old Style', serif" },
-  "css": "theme.css"                // 可选，用于覆盖 .nb-md 里的排版细节
+  "css": "theme.css"                // 可选，用于覆盖 .nx-md 里的排版细节
 }
 ```
 
-加载方式：`ThemeProvider` 读取 JSON，生成 `[data-theme="solarized"] { --nb-bg: … }` 注入一个 `<style>` 标签，再把 `theme.css` 追加进去。CodeMirror 的 `HighlightStyle` 从 `--nb-syn-*` 变量生成，Markdown 渲染区的代码块也走同一套变量，这样三处高亮永远一致。
+加载方式：`ThemeProvider` 读取 JSON，生成 `[data-theme="solarized"] { --nx-bg: … }` 注入一个 `<style>` 标签，再把 `theme.css` 追加进去。CodeMirror 的 `HighlightStyle` 从 `--nx-syn-*` 变量生成，Markdown 渲染区的代码块也走同一套变量，这样三处高亮永远一致。
 
 主题只需要提供它想改的 token，其余从同 appearance 的内置主题继承。
 
 ## 7. 仓库结构
 
 ```
-xnotebook/
+NoteX/
   apps/
     desktop/          # Tauri 壳，仅装配
     dev-server/       # NodeServerHost，开发期用浏览器跑

@@ -2,7 +2,7 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "xnotebook",
+      "name": "NoteX",
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["dev"],
       "port": 5173

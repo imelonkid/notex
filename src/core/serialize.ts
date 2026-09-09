@@ -28,7 +28,7 @@ function fenceFor(source: string): string {
 export function notebookToMarkdown(nb: Notebook): string {
   const head = [
     '---',
-    'xnotebook: 1',
+    'notex: 1',
     `title: ${JSON.stringify(nb.title)}`,
     `created: ${nb.created}`,
     `updated: ${nb.updated}`,
@@ -142,7 +142,7 @@ export function outputsToJson(nb: Notebook): string {
       map[cell.id] = { outputs: cell.outputs, execN: cell.execN, ranWith: cell.ranWith };
     }
   }
-  return JSON.stringify({ xnotebook: 1, cells: map }, null, 2);
+  return JSON.stringify({ notex: 1, cells: map }, null, 2);
 }
 
 export function applyOutputsJson(nb: Notebook, json: string): Notebook {
