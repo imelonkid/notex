@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { LANGS, type LangId } from '@core/model';
+import { LANGS } from '@core/model';
 import { defaultVault, setVault } from '@core/config';
 import type { StoreSetup } from '@core/store/index';
 import { useRuntimes } from '../RuntimeContext';
@@ -43,12 +43,15 @@ export function SettingsModal({ setup, onVaultChanged, onClose }: Props) {
   const currentVaultValue = setup.isDefaultVault ? '' : setup.vaultPath;
   const vaultDirty = setup.store.kind === 'vault' && vaultInput.trim() !== currentVaultValue;
 
-  const applyVault = async (next: string | null) => {
+  /** 立即切回默认位置，不必再点保存 */
+  const restoreDefaultVault = async () => {
     setVaultBusy(true);
     setVaultError(null);
     try {
-      await setVault(host, next);
+      setVaultInput('');
+      await setVault(host, null);
       onVaultChanged();
+      onClose();
     } catch (e) {
       setVaultError(String((e as Error)?.message ?? e));
     } finally {
@@ -56,12 +59,11 @@ export function SettingsModal({ setup, onVaultChanged, onClose }: Props) {
     }
   };
 
+  /** 选完目录只填进输入框，仍由"保存"提交 */
   const browseVault = async () => {
     if (!host.pickDirectory) return;
     const picked = await host.pickDirectory();
-    if (!picked) return;
-    setVaultInput(picked);
-    await applyVault(picked);
+    if (picked) setVaultInput(picked);
   };
 
   useEffect(() => {
@@ -70,9 +72,27 @@ export function SettingsModal({ setup, onVaultChanged, onClose }: Props) {
     setPaths(initial);
   }, [registry]);
 
-  const applyPath = async (lang: LangId) => {
-    registry.setManualPath(lang, paths[lang]?.trim() || null);
-    await registry.detect(lang, true);
+  /** 一次提交所有暂存的改动：运行时路径与笔记库位置 */
+  const save = async () => {
+    setVaultBusy(true);
+    setVaultError(null);
+    try {
+      for (const l of LANGS) {
+        const next = paths[l.id]?.trim() || null;
+        if ((registry.getManualPath(l.id) || null) === next) continue;
+        registry.setManualPath(l.id, next);
+        await registry.detect(l.id, true);
+      }
+      if (vaultDirty) {
+        await setVault(host, vaultInput.trim() || null);
+        onVaultChanged();
+      }
+      onClose();
+    } catch (e) {
+      setVaultError(String((e as Error)?.message ?? e));
+    } finally {
+      setVaultBusy(false);
+    }
   };
 
   const redetectAll = async () => {
@@ -99,7 +119,7 @@ export function SettingsModal({ setup, onVaultChanged, onClose }: Props) {
                   placeholder={vaultDefault ? `默认：${vaultDefault}` : '留空使用默认位置'}
                   value={vaultInput}
                   onChange={(e) => setVaultInput(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && void applyVault(vaultInput || null)}
+                  onKeyDown={(e) => e.key === 'Enter' && void save()}
                 />
                 {host.pickDirectory && (
                   <button className="nx-btn-mini" onClick={() => void browseVault()} disabled={vaultBusy}>
@@ -192,8 +212,7 @@ export function SettingsModal({ setup, onVaultChanged, onClose }: Props) {
                   placeholder={state.info?.path ?? `手动指定 ${l.label} 可执行文件路径（留空则自动检测）`}
                   value={paths[l.id] ?? ''}
                   onChange={(e) => setPaths((p) => ({ ...p, [l.id]: e.target.value }))}
-                  onBlur={() => void applyPath(l.id)}
-                  onKeyDown={(e) => e.key === 'Enter' && void applyPath(l.id)}
+                  onKeyDown={(e) => e.key === 'Enter' && void save()}
                 />
                 {state.info?.path && <div className="nx-runtime-detail">{state.info.path}</div>}
                 {state.error && (
@@ -210,27 +229,18 @@ export function SettingsModal({ setup, onVaultChanged, onClose }: Props) {
           {setup.store.kind === 'vault' && !setup.isDefaultVault && (
             <button
               className="nx-btn-ghost"
-              onClick={() => {
-                setVaultInput('');
-                void applyVault(null);
-              }}
+              onClick={() => void restoreDefaultVault()}
               disabled={vaultBusy}
             >
               恢复默认位置
             </button>
           )}
           <span style={{ flex: 1 }} />
-          {vaultDirty && (
-            <button
-              className="nx-btn-outline"
-              onClick={() => void applyVault(vaultInput || null)}
-              disabled={vaultBusy}
-            >
-              {vaultBusy ? '切换中…' : '应用笔记库'}
-            </button>
-          )}
-          <button className="nx-btn-primary" onClick={onClose}>
-            关闭
+          <button className="nx-btn-ghost" onClick={onClose} disabled={vaultBusy}>
+            取消
+          </button>
+          <button className="nx-btn-primary" onClick={() => void save()} disabled={vaultBusy}>
+            {vaultBusy ? '保存中…' : '保存'}
           </button>
         </div>
       </div>
