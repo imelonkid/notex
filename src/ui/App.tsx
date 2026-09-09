@@ -20,6 +20,7 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
   const [dropId, setDropId] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [depsStatus, setDepsStatus] = useState<Record<string, string>>({});
+  const [refreshing, setRefreshing] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(
     () => localStorage.getItem('nx.sidebar.collapsed') === '1',
   );
@@ -260,7 +261,26 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
           </button>
         </div>
 
-        <div className="nx-section-label">我的笔记</div>
+        <div className="nx-section-label nx-section-head">
+          <span>我的笔记</span>
+          <button
+            className="nx-icon-btn"
+            title="重新读取笔记库目录"
+            aria-label="刷新笔记列表"
+            data-busy={refreshing}
+            disabled={refreshing}
+            onClick={async () => {
+              setRefreshing(true);
+              try {
+                await book.checkExternal();
+              } finally {
+                setRefreshing(false);
+              }
+            }}
+          >
+            ↻
+          </button>
+        </div>
         <div className="nx-nb-list">
           {book.refs.map((ref) => (
             <div

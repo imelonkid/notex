@@ -823,3 +823,40 @@ svg.nx-out-html {
 .nx-modal-footer .nx-btn-ghost {
   white-space: nowrap;
 }
+
+/* 分区标题带一个操作按钮 */
+.nx-section-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.nx-section-head > span {
+  flex: 1;
+  min-width: 0;
+}
+
+.nx-icon-btn {
+  background: transparent;
+  border: none;
+  color: var(--nx-fg-faint);
+  font-size: 13px;
+  line-height: 1;
+  padding: 2px 5px;
+  border-radius: var(--nx-radius-sm);
+  flex: none;
+}
+.nx-icon-btn:hover:not(:disabled) {
+  color: var(--nx-fg);
+  background: var(--nx-bg-hover);
+}
+.nx-icon-btn:disabled {
+  cursor: default;
+}
+.nx-icon-btn[data-busy='true'] {
+  animation: nx-spin 0.7s linear infinite;
+}
+@keyframes nx-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
