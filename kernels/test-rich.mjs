@@ -70,6 +70,26 @@ const CASES = {
       expectMime: null,
       expectIn: [],
     },
+    {
+      name: 'matplotlib 图表自动渲染成 PNG（不写返回值）',
+      code:
+        'import matplotlib.pyplot as plt\n'
+        + 'plt.plot([1, 4, 9, 16])\n'
+        + 'plt.title("t")',
+      expectMime: 'image/png',
+      expectIn: [],
+      fromDisplay: true,
+    },
+    {
+      name: '返回 figure 时作为结果渲染',
+      code:
+        'import matplotlib.pyplot as plt\n'
+        + 'fig, ax = plt.subplots()\n'
+        + 'ax.hist([1, 2, 2, 3, 3, 3])\n'
+        + 'fig',
+      expectMime: 'image/png',
+      expectIn: [],
+    },
   ],
   js: [
     {
@@ -162,7 +182,9 @@ async function runLang(lang) {
 
   for (const c of CASES[lang]) {
     const msgs = await k.execute(c.code);
-    const result = msgs.find((m) => m.type === 'result');
+    const result = c.fromDisplay
+      ? msgs.find((m) => m.type === 'display')
+      : msgs.find((m) => m.type === 'result');
     const err = msgs.find((m) => m.type === 'error');
     if (err) {
       check(c.name, false, `内核报错 ${err.ename}: ${err.evalue}`);

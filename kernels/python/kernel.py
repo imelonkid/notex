@@ -16,6 +16,10 @@ import traceback
 
 RS = "\x1e"
 _REAL_STDOUT = sys.stdout
+
+# 必须在用户代码 import matplotlib 之前设置：Agg 是纯渲染后端，
+# 不会尝试开窗口，也就不会在 macOS 上弹图标抢焦点。
+os.environ.setdefault("MPLBACKEND", "Agg")
 _emit_lock = threading.Lock()
 
 
@@ -63,6 +67,43 @@ def set_request(request_id):
     ERR_SINK.request_id = request_id
 
 
+def figure_png(fig):
+    """把一个 matplotlib figure 渲染成 base64 PNG；失败返回 None。"""
+    import base64
+
+    buf = io.BytesIO()
+    try:
+        fig.savefig(buf, format="png", dpi=144, bbox_inches="tight", facecolor=fig.get_facecolor())
+    except Exception:
+        return None
+    return base64.b64encode(buf.getvalue()).decode("ascii")
+
+
+def is_figure(value):
+    return hasattr(value, "savefig") and hasattr(value, "get_facecolor")
+
+
+def open_figures():
+    """当前仍打开的 matplotlib figure，(编号, figure) 列表。未用过 matplotlib 时为空。"""
+    plt = sys.modules.get("matplotlib.pyplot")
+    if plt is None:
+        return []
+    try:
+        return [(num, plt.figure(num)) for num in plt.get_fignums()]
+    except Exception:
+        return []
+
+
+def close_figures():
+    plt = sys.modules.get("matplotlib.pyplot")
+    if plt is None:
+        return
+    try:
+        plt.close("all")
+    except Exception:
+        pass
+
+
 def repr_bundle(value):
     """支持 IPython 风格的富输出协议。"""
     data = {}
@@ -79,6 +120,13 @@ def repr_bundle(value):
                     data[mime] = rendered
             except Exception:
                 pass
+    if is_figure(value):
+        rendered = figure_png(value)
+        if rendered:
+            data["image/png"] = rendered
+            data["text/plain"] = "<Figure>"
+            return data
+
     png = getattr(value, "_repr_png_", None)
     if callable(png):
         try:
@@ -132,11 +180,34 @@ def execute(request_id, code):
     try:
         if body:
             exec(compile(ast.Module(body=body, type_ignores=[]), "<cell>", "exec"), NS)
+
+        value = None
         if tail is not None:
             value = eval(compile(tail, "<cell>", "eval"), NS)
-            if value is not None:
-                NS["_"] = value
-                emit({"id": request_id, "type": "result", "data": repr_bundle(value)})
+
+        # 画完图不写返回值也要出图，行为对齐 Jupyter 的 inline 后端。
+        # 若末尾表达式本身就是某张图，那张图留给 result，不重复展示。
+        result_fig = value if is_figure(value) else None
+        for _num, fig in open_figures():
+            if result_fig is not None and fig is result_fig:
+                continue
+            rendered = figure_png(fig)
+            if rendered:
+                emit(
+                    {
+                        "id": request_id,
+                        "type": "display",
+                        "data": {"image/png": rendered, "text/plain": "<Figure>"},
+                    }
+                )
+
+        # 结果要在关掉画布之前渲染，否则 savefig 拿不到 canvas
+        result_data = repr_bundle(value) if value is not None else None
+        close_figures()
+
+        if result_data is not None:
+            NS["_"] = value
+            emit({"id": request_id, "type": "result", "data": result_data})
     except KeyboardInterrupt:
         emit(
             {

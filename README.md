@@ -118,6 +118,25 @@ StringUtils.reverse("NoteX")
 两处同 id 时用户目录优先。主题包可以附带一个 CSS 文件，在 `css` 字段里写文件名。组件不写死任何颜色，
 CodeMirror 高亮与 Markdown 代码块共用同一组 `--nx-syn-*` 变量，三处配色永远一致。
 
+## Python 绘图
+
+matplotlib 的图会自动显示，不需要写返回值，行为和 Jupyter 的 inline 后端一致：
+
+```python
+import matplotlib.pyplot as plt
+plt.plot([1, 4, 9, 16])
+```
+
+内核在用户代码之前把 `MPLBACKEND` 锁成 `Agg`，所以不会弹出绘图窗口，
+在 macOS 上也不会抢焦点。把 figure 作为末尾表达式返回同样能出图。
+
+画中文标签需要指定含中文字形的字体，否则显示成方框：
+
+```python
+plt.rcParams["font.sans-serif"] = ["PingFang SC", "Heiti SC", "Arial Unicode MS"]
+plt.rcParams["axes.unicode_minus"] = False
+```
+
 ## Markdown cell 的编辑
 
 - **双击**正文进入编辑框，编辑态只有编辑框，没有并排预览
