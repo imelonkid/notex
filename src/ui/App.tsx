@@ -9,6 +9,8 @@ import { Cell } from './components/Cell';
 import { NoteTree } from './components/NoteTree';
 import { ContextMenu, type MenuItem, type MenuState } from './components/ContextMenu';
 import { Backlinks } from './components/Backlinks';
+import { InsertStrip } from './components/InsertStrip';
+import { Shortcuts } from './components/Shortcuts';
 import { useLinkIndex } from './useLinkIndex';
 import { SettingsModal } from './components/SettingsModal';
 import { useRuntimes } from './RuntimeContext';
@@ -39,6 +41,11 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
   const [menu, setMenu] = useState<MenuState | null>(null);
   /** 侧栏里正在就地重命名的笔记 */
   const [renamingId, setRenamingId] = useState<string | null>(null);
+  /** 当前 cell，工具栏与快捷键作用于它 */
+  const [activeCellId, setActiveCellId] = useState<string | null>(null);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const activeCellIdRef = useRef<string | null>(null);
+  activeCellIdRef.current = activeCellId;
   const [sidebarCollapsed, setSidebarCollapsed] = useState(
     () => localStorage.getItem('nx.sidebar.collapsed') === '1',
   );
@@ -137,24 +144,6 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
       return next;
     });
   }, [book.activeId]);
-
-  // Cmd/Ctrl+B 切换侧栏，Cmd/Ctrl+S 立即保存
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const mod = e.metaKey || e.ctrlKey;
-      if (!mod) return;
-      const key = e.key.toLowerCase();
-      if (key === 'b') {
-        e.preventDefault();
-        setSidebarCollapsed((c) => !c);
-      } else if (key === 's') {
-        e.preventDefault();
-        void book.flush();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [book]);
 
   /** 运行一个 cell：确保内核就绪 → 解析依赖 → 流式收集输出 → 落库 */
   const runCell = useCallback(
@@ -266,17 +255,80 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
     setEditingId(null);
   }, [book]);
 
-  const insertAfter = (index: number | null, type: 'md' | 'code') => {
+  /** 在指定下标插入，index 为 null 表示追加到末尾 */
+  const insertAt = (index: number | null, type: 'md' | 'code') => {
     const cells = nbRef.current?.cells ?? [];
     // 新代码 cell 沿用上一个代码 cell 的语言
     const prevCode = [...cells.slice(0, index ?? cells.length)].reverse().find(isCode);
     const lang: LangId = prevCode?.lang ?? 'python';
     const cell = type === 'md' ? newMarkdownCell() : newCodeCell(lang);
     book.update(ops.insert(index, cell));
+    setActiveCellId(cell.id);
     if (type === 'md') setEditingId(cell.id);
   };
 
+  /** 在当前 cell 下方插入，没有当前 cell 就追加 */
+  const insertBelowActive = (type: 'md' | 'code') => {
+    const cells = nbRef.current?.cells ?? [];
+    const i = cells.findIndex((c) => c.id === activeCellId);
+    insertAt(i < 0 ? null : i + 1, type);
+  };
+
+  /** 文本与代码互转，保留源码 */
+  const convertCell = (cellId: string) => {
+    const cells = nbRef.current?.cells ?? [];
+    const cell = cells.find((c) => c.id === cellId);
+    if (!cell) return;
+    const prevCode = cells.filter(isCode).find((c) => c.id !== cellId);
+    book.update(ops.convert(cellId, prevCode?.lang ?? 'python'));
+    if (isCode(cell)) setEditingId(cellId);
+  };
+
+  /**
+   * 快捷键。全部带修饰键，不引入 Jupyter 那样的命令模式：
+   * 这个应用大部分时间在输入文字，模态切换的摩擦比省下的键位更贵。
+   */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const mod = e.metaKey || e.ctrlKey;
+      if (!mod) return;
+      const key = e.key.toLowerCase();
+      const active = activeCellIdRef.current;
+
+      if (key === 'b') {
+        e.preventDefault();
+        setSidebarCollapsed((c) => !c);
+      } else if (key === 's') {
+        e.preventDefault();
+        void book.flush();
+      } else if (key === 'enter' && e.shiftKey) {
+        e.preventDefault();
+        void runAll();
+      } else if (key === 'enter' && e.altKey) {
+        e.preventDefault();
+        insertBelowActive('code');
+      } else if (e.altKey && (key === 'arrowdown' || key === 'arrowup')) {
+        e.preventDefault();
+        const cells = nbRef.current?.cells ?? [];
+        const i = cells.findIndex((c) => c.id === active);
+        insertAt(key === 'arrowdown' ? (i < 0 ? null : i + 1) : Math.max(i, 0), 'md');
+      } else if (key === 'backspace' && active) {
+        e.preventDefault();
+        book.update(ops.remove(active));
+        setActiveCellId(null);
+      } else if (key === '/') {
+        e.preventDefault();
+        setShortcutsOpen((v) => !v);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [book, runAll, insertAt, insertBelowActive]);
+
+
+
   const nb = book.nb;
+  const activeCell = nb?.cells.find((c) => c.id === activeCellId) ?? null;
 
   /**
    * 「移动到」按目录层级做成多级子菜单，而不是把 "工作/项目A" 这种
@@ -335,6 +387,50 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
       },
     ];
     setMenu({ x, y, items });
+  };
+
+  const openCellMenu = (cellId: string, x: number, y: number) => {
+    const cells = nbRef.current?.cells ?? [];
+    const i = cells.findIndex((c) => c.id === cellId);
+    if (i < 0) return;
+    const cell = cells[i];
+    const code = isCode(cell);
+    setMenu({
+      x,
+      y,
+      items: [
+        { label: '在上方插入文本', onSelect: () => insertAt(i, 'md') },
+        { label: '在上方插入代码', onSelect: () => insertAt(i, 'code') },
+        { label: '在下方插入文本  ⌥⌘↓', onSelect: () => insertAt(i + 1, 'md') },
+        { label: '在下方插入代码', onSelect: () => insertAt(i + 1, 'code') },
+        {
+          label: code ? '转为文本' : '转为代码',
+          separatorBefore: true,
+          onSelect: () => convertCell(cellId),
+        },
+        {
+          label: '上移',
+          separatorBefore: true,
+          disabled: i === 0,
+          onSelect: () => book.update(ops.move(cellId, cells[i - 1].id)),
+        },
+        {
+          label: '下移',
+          disabled: i === cells.length - 1,
+          onSelect: () =>
+            book.update(ops.move(cellId, cells[i + 2]?.id ?? 'end')),
+        },
+        ...(code
+          ? [{ label: '运行  ⌘↩', onSelect: () => void runCell(cellId) }]
+          : []),
+        {
+          label: '删除 cell  ⌘⌫',
+          danger: true,
+          separatorBefore: true,
+          onSelect: () => book.update(ops.remove(cellId)),
+        },
+      ],
+    });
   };
 
   const openFolderMenu = (dir: string, x: number, y: number) => {
@@ -561,25 +657,90 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
 
               <div className="nx-toolbar">
                 <button className="nx-btn-primary" onClick={() => void runAll()} disabled={anyRunning}>
-                  全部运行
+                  ▶ 全部运行
                 </button>
-                <button className="nx-btn-ghost" onClick={() => book.update(ops.clearOutputs())}>
-                  清空输出
-                </button>
-                <button className="nx-btn-ghost" onClick={() => exportMarkdown(nb)}>
-                  导出 Markdown
-                </button>
-                <button className="nx-btn-ghost" onClick={() => exportIpynb(nb)}>
-                  导出 ipynb
-                </button>
-                <button className="nx-btn-ghost" onClick={() => void doImport()}>
-                  导入…
-                </button>
+
+                <div className="nx-seg">
+                  <button className="nx-seg-btn" onClick={() => insertBelowActive('md')}>
+                    ＋ 文本
+                  </button>
+                  <button className="nx-seg-btn" onClick={() => insertBelowActive('code')}>
+                    ＋ 代码
+                  </button>
+                </div>
+
+                {/* 类型切换作用于当前 cell，是换语言的主入口 */}
+                <div className="nx-seg" title={activeCell ? '切换当前 cell 的类型' : '先选中一个 cell'}>
+                  <button
+                    className="nx-seg-btn"
+                    data-active={activeCell ? !isCode(activeCell) : false}
+                    disabled={!activeCell}
+                    onClick={() => activeCell && !isCode(activeCell) ? undefined : activeCell && convertCell(activeCell.id)}
+                  >
+                    文本
+                  </button>
+                  {LANGS.map((l) => (
+                    <button
+                      key={l.id}
+                      className="nx-seg-btn"
+                      data-active={!!activeCell && isCode(activeCell) && activeCell.lang === l.id}
+                      disabled={!activeCell}
+                      onClick={() => {
+                        if (!activeCell) return;
+                        if (!isCode(activeCell)) convertCell(activeCell.id);
+                        book.update(ops.setLang(activeCell.id, l.id));
+                      }}
+                    >
+                      {l.label}
+                    </button>
+                  ))}
+                </div>
+
+                {anyRunning && (
+                  <button
+                    className="nx-btn-ghost"
+                    onClick={() => {
+                      for (const l of LANGS) void registry.get(l.id).session?.interrupt();
+                    }}
+                  >
+                    ⏹ 中断
+                  </button>
+                )}
+
                 <span style={{ flex: 1 }} />
-                <span className="nx-hint">Shift+Enter 运行/预览 · 双击文本编辑 · 拖 ⠿ 排序</span>
+
+                <button
+                  className="nx-btn-mini"
+                  title="快捷键（⌘/）"
+                  onClick={() => setShortcutsOpen(true)}
+                >
+                  ⌘/
+                </button>
+
+                <button
+                  className="nx-btn-mini"
+                  title="更多"
+                  onClick={(e) => {
+                    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                    setMenu({
+                      x: r.left,
+                      y: r.bottom + 4,
+                      items: [
+                        { label: '清空输出', onSelect: () => book.update(ops.clearOutputs()) },
+                        { label: '导入…', separatorBefore: true, onSelect: () => void doImport() },
+                        { label: '导出 Markdown', onSelect: () => exportMarkdown(nb) },
+                        { label: '导出 ipynb', onSelect: () => exportIpynb(nb) },
+                      ],
+                    });
+                  }}
+                >
+                  ⋯
+                </button>
               </div>
 
               {nb.cells.map((cell, i) => (
+                <div key={cell.id}>
+                <InsertStrip onInsert={(type) => insertAt(i, type)} />
                 <Cell
                   key={cell.id}
                   cell={cell}
@@ -590,7 +751,9 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
                   isBrokenLink={(target) => links.isBroken(book.activeId, target)}
                   allNotes={book.refs}
                   currentNoteId={book.activeId}
-                  showExecN
+                  active={cell.id === activeCellId}
+                  onActivate={() => setActiveCellId(cell.id)}
+                  onMenu={(x, y) => openCellMenu(cell.id, x, y)}
                   dropActive={!!dragId && dropId === cell.id}
                   onSource={(v) => book.update(ops.setSource(cell.id, v))}
                   onLang={(l) => book.update(ops.setLang(cell.id, l))}
@@ -602,7 +765,6 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
                   onRemove={() => book.update(ops.remove(cell.id))}
                   onEdit={() => setEditingId(cell.id)}
                   onDoneEdit={() => setEditingId(null)}
-                  onInsert={(type) => insertAfter(i + 1, type)}
                   onDragStart={() => setDragId(cell.id)}
                   onDragEnd={() => {
                     setDragId(null);
@@ -619,6 +781,7 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
                   }
                   onOpenSettings={() => setSettingsOpen(true)}
                 />
+                </div>
               ))}
 
               <div
@@ -634,14 +797,21 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
                 }}
               >
                 <div className="nx-dropline" data-active={!!dragId && dropId === 'end'} />
-                <div className="nx-add-row">
-                  <button className="nx-btn-dashed" onClick={() => insertAfter(null, 'md')}>
-                    ＋ 文本
-                  </button>
-                  <button className="nx-btn-dashed" onClick={() => insertAfter(null, 'code')}>
-                    ＋ 代码
-                  </button>
-                </div>
+                {nb.cells.length === 0 ? (
+                  <div className="nx-empty-note">
+                    <div className="nx-empty-title">这篇笔记还是空的</div>
+                    <div className="nx-seg">
+                      <button className="nx-seg-btn" onClick={() => insertAt(null, 'md')}>
+                        ＋ 文本
+                      </button>
+                      <button className="nx-seg-btn" onClick={() => insertAt(null, 'code')}>
+                        ＋ 代码
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <InsertStrip onInsert={(type) => insertAt(null, type)} />
+                )}
               </div>
 
               <Backlinks
@@ -657,6 +827,7 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
         </div>
       </main>
 
+      {shortcutsOpen && <Shortcuts onClose={() => setShortcutsOpen(false)} />}
       {menu && <ContextMenu state={menu} onClose={() => setMenu(null)} />}
 
       {settingsOpen && (

@@ -83,6 +83,31 @@ export function uid(prefix = 'c'): string {
   return `${prefix}${Date.now().toString(36)}${seq.toString(36)}`;
 }
 
+/**
+ * 代码 cell 的执行状态，决定装订线上序号的颜色。
+ * 参考 Jupyter 的 [ ] / [*] / [n]，但用颜色额外区分成功与失败。
+ */
+export type CellStatus = 'idle' | 'running' | 'ok' | 'error' | 'aborted';
+
+export function cellStatus(cell: Cell, running: boolean): CellStatus {
+  if (running) return 'running';
+  if (cell.type !== 'code') return 'idle';
+  const err = cell.outputs.find((o) => o.type === 'error');
+  if (err && err.type === 'error') {
+    // 中断不是失败，用不同的颜色提示
+    return err.ename === 'KeyboardInterrupt' ? 'aborted' : 'error';
+  }
+  if (cell.outputs.some((o) => o.type === 'missing-runtime')) return 'error';
+  return cell.execN ? 'ok' : 'idle';
+}
+
+/** 装订线上显示的标记 */
+export function cellBadge(cell: Cell, running: boolean): string {
+  if (running) return '[*]';
+  if (cell.type !== 'code') return '';
+  return cell.execN ? `[${cell.execN}]` : '[ ]';
+}
+
 export function isCode(cell: Cell): cell is CodeCell {
   return cell.type === 'code';
 }

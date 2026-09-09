@@ -476,6 +476,15 @@ export const ops = {
     if (to < 0) to = d.cells.length;
     d.cells.splice(to, 0, cell);
   },
+  /** 文本与代码互转，源码原样保留 */
+  convert: (id: string, fallbackLang: LangId) => (d: Notebook) => {
+    const i = d.cells.findIndex((c) => c.id === id);
+    if (i < 0) return;
+    const cell = d.cells[i];
+    d.cells[i] = isCode(cell)
+      ? { id: cell.id, type: 'md', source: cell.source }
+      : { id: cell.id, type: 'code', lang: fallbackLang, source: cell.source, outputs: [] };
+  },
   clearOutputs: () => (d: Notebook) => {
     for (const c of d.cells) {
       if (isCode(c)) {

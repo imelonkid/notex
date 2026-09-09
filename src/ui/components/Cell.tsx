@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { marked } from 'marked';
-import { LANGS, type Cell as CellModel, type LangId } from '@core/model';
+import {
+  LANGS,
+  type Cell as CellModel,
+  type LangId,
+  cellBadge,
+  cellStatus,
+} from '@core/model';
 import { expandWikiLinks } from '@core/links';
 import { CodeEditor } from '../editor/CodeEditor';
 import { useRuntimes } from '../RuntimeContext';
@@ -20,8 +26,11 @@ interface Props {
   /** 供 [[ 补全用的笔记清单 */
   allNotes?: NotebookRef[];
   currentNoteId?: string | null;
-  showExecN: boolean;
   dropActive: boolean;
+  /** 当前 cell，工具栏和快捷键作用于它 */
+  active: boolean;
+  onActivate(): void;
+  onMenu(x: number, y: number): void;
   onSource(value: string): void;
   onLang(lang: LangId): void;
   onRun(): void;
@@ -29,7 +38,6 @@ interface Props {
   onRemove(): void;
   onEdit(): void;
   onDoneEdit(): void;
-  onInsert(type: 'md' | 'code'): void;
   onDragStart(): void;
   onDragEnd(): void;
   onDragOver(): void;
@@ -48,46 +56,72 @@ function renderMarkdown(src: string): string {
   }
 }
 
-/** 语言 tab：切换只改 lang，不清空源码；tab 上叠加运行时状态点 */
-function LangTabs({ current, onPick }: { current: LangId; onPick(l: LangId): void }) {
+/**
+ * 语言 chip：平时只显示当前语言，点开才列出三种语言与各自的运行时状态。
+ * 此前每个 cell 常驻三个标签，信息与操作混在一起，占地方也不必要。
+ */
+function LangChip({ current, onPick }: { current: LangId; onPick(l: LangId): void }) {
   const { registry, revision } = useRuntimes();
+  const [open, setOpen] = useState(false);
   void revision;
 
+  const state = registry.get(current);
+  const label = LANGS.find((l) => l.id === current)?.short ?? current;
+
+  useEffect(() => {
+    if (!open) return;
+    const close = () => setOpen(false);
+    // 捕获阶段，点任何地方都收起
+    document.addEventListener('mousedown', close, true);
+    return () => document.removeEventListener('mousedown', close, true);
+  }, [open]);
+
   return (
-    <div className="nx-langtabs" role="tablist">
-      {LANGS.map((l) => {
-        const state = registry.get(l.id);
-        const title =
-          state.status === 'ready' || state.status === 'busy'
-            ? `${state.provider?.label ?? l.label} ${state.info?.version ?? ''}\n${state.info?.path ?? ''}`
-            : state.status === 'available'
-              ? `已检测到 ${state.info?.version ?? ''}，运行时启动\n${state.info?.path ?? ''}`
-              : state.status === 'missing'
-                ? '未检测到运行环境，点运行会给出安装指引'
-                : state.status === 'error'
-                  ? `启动失败：${state.error ?? ''}`
-                  : '尚未检测';
-        return (
-          <button
-            key={l.id}
-            role="tab"
-            aria-selected={l.id === current}
-            className="nx-langtab"
-            data-active={l.id === current}
-            title={title}
-            onClick={() => onPick(l.id)}
-          >
-            <span className="nx-dot" data-status={state.status} />
-            {l.short}
-          </button>
-        );
-      })}
+    <div className="nx-langchip-wrap">
+      <button
+        className="nx-langchip"
+        data-open={open}
+        title={`${state.provider?.label ?? ''} ${state.info?.version ?? ''}`.trim() || '尚未检测'}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setOpen((v) => !v);
+        }}
+      >
+        <span className="nx-dot" data-status={state.status} />
+        {label}
+        <span className="nx-langchip-caret">▾</span>
+      </button>
+      {open && (
+        <div className="nx-langmenu">
+          {LANGS.map((l) => {
+            const st = registry.get(l.id);
+            return (
+              <button
+                key={l.id}
+                className="nx-langmenu-item"
+                data-active={l.id === current}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onPick(l.id);
+                  setOpen(false);
+                }}
+              >
+                <span className="nx-dot" data-status={st.status} />
+                <span className="nx-langmenu-name">{l.label}</span>
+                <span className="nx-langmenu-ver">{st.info?.version ?? ''}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
 
 export function Cell(props: Props) {
-  const { cell, editing, running, busyNote, showExecN, dropActive } = props;
+  const { cell, editing, running, busyNote, dropActive } = props;
   const { registry } = useRuntimes();
   const [mdDraft, setMdDraft] = useState(cell.source);
   const [mdEl, setMdEl] = useState<HTMLTextAreaElement | null>(null);
@@ -127,7 +161,8 @@ export function Cell(props: Props) {
   }, [html, props.isBrokenLink]);
 
   const isCode = cell.type === 'code';
-  const badge = running ? '[*]' : cell.type === 'code' && cell.execN ? `[${cell.execN}]` : '[ ]';
+  const status = cellStatus(cell, running);
+  const badge = cellBadge(cell, running);
 
   return (
     <div
@@ -142,7 +177,18 @@ export function Cell(props: Props) {
       style={{ position: 'relative' }}
     >
       <div className="nx-dropline" data-active={dropActive} />
-      <div className="nx-cell">
+      <div
+        className="nx-cell"
+        data-active={props.active}
+        data-status={status}
+        onMouseDown={props.onActivate}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          props.onActivate();
+          props.onMenu(e.clientX, e.clientY);
+        }}
+      >
         <div className="nx-gutter">
           <span
             className="nx-grip"
@@ -153,30 +199,31 @@ export function Cell(props: Props) {
           >
             ⠿
           </span>
-          {isCode && showExecN && <span className="nx-execn">{badge}</span>}
+          {isCode ? (
+            <button
+              className="nx-execn"
+              data-status={status}
+              title={running ? '中断执行' : '运行这个 cell（⌘↩）'}
+              onClick={(e) => {
+                e.stopPropagation();
+                running ? props.onInterrupt() : props.onRun();
+              }}
+            >
+              <span className="nx-execn-badge">{badge}</span>
+              <span className="nx-execn-run">{running ? '■' : '▶'}</span>
+            </button>
+          ) : null}
         </div>
 
         <div style={{ minWidth: 0 }}>
           <div className="nx-cell-bar" data-floating={!isCode && !editing}>
             {isCode ? (
-              <>
-                <LangTabs current={cell.lang} onPick={props.onLang} />
-                {running ? (
-                  <button className="nx-btn-run" onClick={props.onInterrupt}>
-                    中断
-                  </button>
-                ) : (
-                  <button className="nx-btn-run" onClick={props.onRun}>
-                    运行
-                  </button>
-                )}
-              </>
+              <LangChip current={cell.lang} onPick={props.onLang} />
             ) : (
               editing && (
                 <button
                   className="nx-btn-primary"
                   style={{ fontSize: '11.5px', padding: '3px 14px' }}
-                  // onMouseDown 抢在 textarea 的 blur 之前，避免按钮被重排后点空
                   onMouseDown={(e) => {
                     e.preventDefault();
                     commitAndPreview();
@@ -186,18 +233,6 @@ export function Cell(props: Props) {
                 </button>
               )
             )}
-            <span style={{ flex: 1 }} />
-            <div className="nx-cell-actions">
-              <button className="nx-btn-mini" title="在下方插入文本" onClick={() => props.onInsert('md')}>
-                ＋文本
-              </button>
-              <button className="nx-btn-mini" title="在下方插入代码" onClick={() => props.onInsert('code')}>
-                ＋代码
-              </button>
-              <button className="nx-btn-mini" data-danger="true" title="删除此 cell" onClick={props.onRemove}>
-                ×
-              </button>
-            </div>
           </div>
 
           {isCode ? (
