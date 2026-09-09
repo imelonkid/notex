@@ -46,6 +46,7 @@ export interface NotebookStore {
 
   /** 以下只有落盘的实现支持，localStorage 后端没有目录概念 */
   listAll?(): Promise<VaultListing>;
+  readRaw?(id: string): Promise<string>;
   move?(id: string, targetDir: string): Promise<string>;
   createFolder?(dir: string): Promise<void>;
   removeFolder?(dir: string): Promise<void>;

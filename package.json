@@ -10,13 +10,14 @@
     "typecheck": "tsc --noEmit",
     "test:serialize": "tsx src/core/serialize.test.mjs",
     "test:kernels": "node kernels/test-kernel.mjs java && node kernels/test-kernel.mjs python && node kernels/test-kernel.mjs js && node kernels/test-rich.mjs all",
-    "test": "pnpm typecheck && pnpm test:serialize && pnpm test:links && pnpm test:paths && pnpm test:kernels",
+    "test": "pnpm typecheck && pnpm test:serialize && pnpm test:links && pnpm test:paths && pnpm test:index && pnpm test:kernels",
     "tauri": "tauri",
     "desktop": "tauri dev",
     "desktop:build": "tauri build",
     "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml",
     "test:links": "tsx src/core/links.test.mjs",
-    "test:paths": "tsx src/core/store/paths.test.mjs"
+    "test:paths": "tsx src/core/store/paths.test.mjs",
+    "test:index": "tsx src/core/linkIndex.test.mjs"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.18.0",

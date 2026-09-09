@@ -8,6 +8,8 @@ import type { StoreSetup } from '@core/store/index';
 import { Cell } from './components/Cell';
 import { NoteTree } from './components/NoteTree';
 import { ContextMenu, type MenuItem, type MenuState } from './components/ContextMenu';
+import { Backlinks } from './components/Backlinks';
+import { useLinkIndex } from './useLinkIndex';
 import { SettingsModal } from './components/SettingsModal';
 import { useRuntimes } from './RuntimeContext';
 import { scrollToHeadingText, useLinkInterceptor } from './useLinkInterceptor';
@@ -42,6 +44,8 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
   const nbRef = useRef(book.nb);
   nbRef.current = book.nb;
 
+  const links = useLinkIndex(setup.store, book.refs);
+
   /** 正文与输出里的链接一律由应用接管，webview 绝不自己导航 */
   const [linkNotice, setLinkNotice] = useState<string | null>(null);
   /** 跳转到目标笔记后要滚到的小节，等目标渲染完再用 */
@@ -54,13 +58,17 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
   const openInternalLink = useCallback(
     (target: string, hash?: string) => {
       // 只写了 #小节 的情况已在拦截器里当锚点处理，这里一定有 target
-      const id = resolveNoteLink(
-        target,
-        refsRef.current,
-        activeIdRef.current ? dirOf(activeIdRef.current) : '',
-      );
+      const fromDir = activeIdRef.current ? dirOf(activeIdRef.current) : '';
+      const id = resolveNoteLink(target, refsRef.current, fromDir);
       if (!id) {
-        setLinkNotice(`找不到这篇笔记：${target}`);
+        // 断链：直接问要不要按链接里写的路径建出来，
+        // 先写下想法再补内容是很自然的写作顺序
+        const clean = target.replace(/\.md$/i, '').replace(/^\.\//, '');
+        const targetDir = dirOf(clean) || fromDir;
+        const name = baseOf(clean);
+        if (window.confirm(`笔记「${name}」还不存在，现在创建？`)) {
+          void book.createNotebook(name, targetDir);
+        }
         return;
       }
       if (id === activeIdRef.current) {
@@ -580,6 +588,9 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
                   editing={editingId === cell.id}
                   running={!!runningIds[cell.id]}
                   busyNote={depsStatus[cell.id]}
+                  isBrokenLink={(target) => links.isBroken(book.activeId, target)}
+                  allNotes={book.refs}
+                  currentNoteId={book.activeId}
                   showExecN
                   dropActive={!!dragId && dropId === cell.id}
                   onSource={(v) => book.update(ops.setSource(cell.id, v))}
@@ -633,6 +644,15 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
                   </button>
                 </div>
               </div>
+
+              <Backlinks
+                backlinks={links.backlinksOf(book.activeId)}
+                ready={links.ready}
+                onOpen={(id) => {
+                  setEditingId(null);
+                  void book.open(id);
+                }}
+              />
             </>
           )}
         </div>

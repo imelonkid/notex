@@ -1,10 +1,12 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { marked } from 'marked';
 import { LANGS, type Cell as CellModel, type LangId } from '@core/model';
 import { expandWikiLinks } from '@core/links';
 import { CodeEditor } from '../editor/CodeEditor';
 import { useRuntimes } from '../RuntimeContext';
 import { Outputs } from './Outputs';
+import { WikiComplete } from './WikiComplete';
+import type { NotebookRef } from '@core/store/index';
 
 interface Props {
   cell: CellModel;
@@ -13,6 +15,11 @@ interface Props {
   running: boolean;
   /** 运行中的额外说明，例如"正在解析依赖…" */
   busyNote?: string;
+  /** 判断一个站内链接是否解析不到目标 */
+  isBrokenLink?(target: string): boolean;
+  /** 供 [[ 补全用的笔记清单 */
+  allNotes?: NotebookRef[];
+  currentNoteId?: string | null;
   showExecN: boolean;
   dropActive: boolean;
   onSource(value: string): void;
@@ -83,7 +90,9 @@ export function Cell(props: Props) {
   const { cell, editing, running, busyNote, showExecN, dropActive } = props;
   const { registry } = useRuntimes();
   const [mdDraft, setMdDraft] = useState(cell.source);
-  const mdRef = useRef<HTMLTextAreaElement>(null);
+  const [mdEl, setMdEl] = useState<HTMLTextAreaElement | null>(null);
+  const mdRef = useRef<HTMLTextAreaElement | null>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
 
   // 编辑态只显示编辑框，预览态才渲染，因此始终用已提交的 source
   const html = useMemo(
@@ -100,6 +109,22 @@ export function Cell(props: Props) {
     props.onSource(mdDraft);
     props.onDoneEdit();
   };
+
+  // 渲染完再标断链：直接在 DOM 上打标记，比对 HTML 字符串做替换稳妥
+  useEffect(() => {
+    const root = previewRef.current;
+    if (!root || !props.isBrokenLink) return;
+    for (const a of root.querySelectorAll('a')) {
+      const href = a.getAttribute('href') ?? '';
+      // 只判断站内链接，外部链接与锚点不涉及断链
+      if (/^[a-z][a-z0-9+.-]*:/i.test(href) || href.startsWith('#') || href.startsWith('//')) {
+        continue;
+      }
+      const target = decodeURIComponent(href.split('#')[0]);
+      if (props.isBrokenLink(target)) a.dataset.broken = 'true';
+      else delete a.dataset.broken;
+    }
+  }, [html, props.isBrokenLink]);
 
   const isCode = cell.type === 'code';
   const badge = running ? '[*]' : cell.type === 'code' && cell.execN ? `[${cell.execN}]` : '[ ]';
@@ -201,6 +226,7 @@ export function Cell(props: Props) {
               )}
             </>
           ) : editing ? (
+            <>
             <textarea
               className="nx-md-editor"
               autoFocus
@@ -218,7 +244,10 @@ export function Cell(props: Props) {
                   commitAndPreview();
                 }
               }}
-              ref={mdRef}
+              ref={(el) => {
+                mdRef.current = el;
+                setMdEl(el);
+              }}
               onBlur={() => {
                 // 切换到别的应用也会触发 blur，但那时 activeElement 仍是本编辑框。
                 // 只有焦点真的落到页面里别的元素上，才回到预览。
@@ -228,8 +257,26 @@ export function Cell(props: Props) {
                 }, 0);
               }}
             />
+            {props.allNotes && (
+              <WikiComplete
+                textarea={mdEl}
+                value={mdDraft}
+                notes={props.allNotes}
+                currentNoteId={props.currentNoteId ?? null}
+                onInsert={(next, caret) => {
+                  setMdDraft(next);
+                  props.onSource(next);
+                  requestAnimationFrame(() => {
+                    mdRef.current?.focus();
+                    mdRef.current?.setSelectionRange(caret, caret);
+                  });
+                }}
+              />
+            )}
+            </>
           ) : (
             <div
+              ref={previewRef}
               className="nx-md"
               onDoubleClick={enterEdit}
               dangerouslySetInnerHTML={{ __html: html }}
