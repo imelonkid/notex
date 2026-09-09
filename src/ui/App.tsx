@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { LANGS, isCode, type LangId, type Output } from '@core/model';
+import { LANGS, isCode, type LangId, type Output, type RunMark } from '@core/model';
 import { exportIpynb, exportMarkdown, importNotebook } from '@core/files';
 import { parseDeps } from '@core/deps';
 import { resolveNoteLink } from '@core/links';
@@ -23,6 +23,12 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [runningIds, setRunningIds] = useState<Record<string, boolean>>({});
+  /**
+   * 每个 cell 在本次会话里的执行结果，只活在内存里。
+   * 刷新页面就没了，因为那时内核也是全新的，装订线上不该再声称"跑过"。
+   * 放在笔记外面，切换笔记再切回来标记还在。
+   */
+  const [runMarks, setRunMarks] = useState<Record<string, RunMark>>({});
   const [dragId, setDragId] = useState<string | null>(null);
   const [dropId, setDropId] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -145,6 +151,22 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
     });
   }, [book.activeId]);
 
+  // 内核重启后，这门语言的 cell 在新内核里都没跑过，清掉标记
+  useEffect(
+    () =>
+      registry.onRestart((lang) => {
+        setRunMarks((r) => {
+          const next: Record<string, RunMark> = {};
+          for (const cell of nbRef.current?.cells ?? []) {
+            const m = r[cell.id];
+            if (m && isCode(cell) && cell.lang !== lang) next[cell.id] = m;
+          }
+          return next;
+        });
+      }),
+    [registry],
+  );
+
   /** 运行一个 cell：确保内核就绪 → 解析依赖 → 流式收集输出 → 落库 */
   const runCell = useCallback(
     async (cellId: string): Promise<'ok' | 'error' | 'aborted' | 'skipped'> => {
@@ -160,14 +182,16 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
           delete next[cellId];
           return next;
         });
+      const mark = (m: RunMark) => setRunMarks((r) => ({ ...r, [cellId]: m }));
 
       setRunningIds((r) => ({ ...r, [cellId]: true }));
-      book.update(ops.setOutputs(cellId, [], lang, false));
+      book.update(ops.setOutputs(cellId, [], lang));
 
       const session = await registry.ensure(lang);
       if (!session) {
         stopRunning();
-        book.update(ops.setOutputs(cellId, [{ type: 'missing-runtime', lang }], lang, false));
+        book.update(ops.setOutputs(cellId, [{ type: 'missing-runtime', lang }], lang));
+        mark('error');
         return 'error';
       }
 
@@ -206,7 +230,8 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
             traceback: [],
           });
           stopRunning();
-          book.update(ops.setOutputs(cellId, outputs, lang, true));
+          book.update(ops.setOutputs(cellId, outputs, lang));
+          mark('error');
           return 'error';
         } finally {
           setDepsStatus((d) => {
@@ -232,7 +257,8 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
       } finally {
         registry.setBusy(lang, false);
         stopRunning();
-        book.update(ops.setOutputs(cellId, outputs, lang, true));
+        book.update(ops.setOutputs(cellId, outputs, lang));
+        mark(status);
       }
       return status;
     },
@@ -726,7 +752,13 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
                       x: r.left,
                       y: r.bottom + 4,
                       items: [
-                        { label: '清空输出', onSelect: () => book.update(ops.clearOutputs()) },
+                        {
+                          label: '清空输出',
+                          onSelect: () => {
+                            book.update(ops.clearOutputs());
+                            setRunMarks({});
+                          },
+                        },
                         { label: '导入…', separatorBefore: true, onSelect: () => void doImport() },
                         { label: '导出 Markdown', onSelect: () => exportMarkdown(nb) },
                         { label: '导出 ipynb', onSelect: () => exportIpynb(nb) },
@@ -747,6 +779,7 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
                   index={i}
                   editing={editingId === cell.id}
                   running={!!runningIds[cell.id]}
+                  mark={runMarks[cell.id]}
                   busyNote={depsStatus[cell.id]}
                   isBrokenLink={(target) => links.isBroken(book.activeId, target)}
                   allNotes={book.refs}
@@ -776,9 +809,14 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
                     setDragId(null);
                     setDropId(null);
                   }}
-                  onRetryDetect={() =>
-                    book.update(ops.setOutputs(cell.id, [], isCode(cell) ? cell.lang : 'java', false))
-                  }
+                  onRetryDetect={() => {
+                    book.update(ops.setOutputs(cell.id, [], isCode(cell) ? cell.lang : 'java'));
+                    setRunMarks((r) => {
+                      const next = { ...r };
+                      delete next[cell.id];
+                      return next;
+                    });
+                  }}
                   onOpenSettings={() => setSettingsOpen(true)}
                 />
                 </div>

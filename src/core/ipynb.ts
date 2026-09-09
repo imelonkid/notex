@@ -29,14 +29,15 @@ function fromLines(source: string | string[] | undefined): string {
   return Array.isArray(source) ? source.join('') : source;
 }
 
-function outputToIpynb(out: Output, execN?: number): Record<string, unknown> | null {
+function outputToIpynb(out: Output): Record<string, unknown> | null {
   switch (out.type) {
     case 'stream':
       return { output_type: 'stream', name: out.name, text: toLines(out.text) };
     case 'result':
       return {
         output_type: 'execute_result',
-        execution_count: execN ?? null,
+        // NoteX 不维护执行序号，导出时统一写 null（nbformat 里表示未运行）
+        execution_count: null,
         data: mimeBundle(out.data),
         metadata: {},
       };
@@ -116,12 +117,12 @@ export function notebookToIpynb(nb: Notebook): string {
     }
     return {
       cell_type: 'code',
-      execution_count: cell.execN ?? null,
+      execution_count: null,
       // 保留每个 cell 的语言，回读时才能还原混合语言的笔记
       metadata: { notex: { lang: cell.lang } },
       source: toLines(cell.source),
       outputs: cell.outputs
-        .map((o) => outputToIpynb(o, cell.execN))
+        .map((o) => outputToIpynb(o))
         .filter((o): o is Record<string, unknown> => o !== null),
     };
   });
@@ -160,7 +161,6 @@ export function ipynbToNotebook(text: string, fallbackTitle = '导入的笔记')
       type: 'code',
       lang,
       source,
-      execN: typeof raw.execution_count === 'number' ? raw.execution_count : undefined,
       ranWith: lang,
       outputs: (raw.outputs ?? [])
         .map((o: Record<string, any>) => ipynbToOutput(o))
@@ -173,7 +173,6 @@ export function ipynbToNotebook(text: string, fallbackTitle = '导入的笔记')
     id: uid('nb'),
     title: String(doc?.metadata?.notex?.title ?? doc?.metadata?.xnotebook?.title ?? fallbackTitle),
     cells,
-    counter: cells.reduce((max, c) => (c.type === 'code' ? Math.max(max, c.execN ?? 0) : max), 0),
     created: now,
     updated: now,
   };

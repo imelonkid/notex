@@ -345,44 +345,69 @@ button {
   --nx-status-run: var(--nx-warn);
 }
 
-/* 装订线上的执行序号：颜色区分状态，悬停变运行按钮 */
-.nx-execn {
+/*
+ * 装订线上的执行标记。括号里画的是这个 cell 在本次会话里发生了什么：
+ * [ ] 没跑过 · [*] 正在跑（呼吸）· [✓] 成功 · [✗] 出错 · [–] 被中断。
+ * 悬停变成运行按钮。
+ */
+.nx-runmark {
   position: relative;
   font-family: var(--nx-font-mono);
   font-size: 11px;
-  color: var(--nx-fg-faint);
+  color: var(--nx-fg-ghost);
   background: none;
   border: none;
   padding: 1px 3px;
   border-radius: var(--nx-radius-sm);
   min-width: 30px;
   text-align: right;
+  transition: color 0.18s ease;
 }
-.nx-execn[data-status='ok'] {
+.nx-runmark[data-status='ok'] {
   color: var(--nx-status-ok);
 }
-.nx-execn[data-status='error'] {
+.nx-runmark[data-status='error'] {
   color: var(--nx-status-err);
 }
-.nx-execn[data-status='aborted'] {
+.nx-runmark[data-status='aborted'] {
   color: var(--nx-warn);
 }
-.nx-execn[data-status='running'] {
+.nx-runmark[data-status='running'] {
   color: var(--nx-status-run);
-  animation: nx-pulse 1.1s ease-in-out infinite;
 }
-.nx-execn-run {
+/* 呼吸：明暗之外再带一点缩放，余光里也看得出它在动 */
+.nx-runmark[data-status='running'] .nx-runmark-badge {
+  display: inline-block;
+  animation: nx-breathe 1.5s ease-in-out infinite;
+}
+@keyframes nx-breathe {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.4;
+    transform: scale(0.9);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .nx-runmark[data-status='running'] .nx-runmark-badge {
+    animation: none;
+  }
+}
+.nx-runmark-run {
   display: none;
   font-size: 10px;
 }
-.nx-execn:hover .nx-execn-badge {
+.nx-runmark:hover .nx-runmark-badge {
   display: none;
 }
-.nx-execn:hover .nx-execn-run {
+.nx-runmark:hover .nx-runmark-run {
   display: inline;
   color: var(--nx-fg);
 }
-.nx-execn:hover {
+.nx-runmark:hover {
   background: var(--nx-bg-hover);
 }
 .nx-dropline {

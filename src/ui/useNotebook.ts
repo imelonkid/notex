@@ -451,17 +451,12 @@ export const ops = {
     const c = d.cells.find((x) => x.id === id);
     if (c && isCode(c)) c.lang = lang;
   },
-  setOutputs:
-    (id: string, outputs: Output[], lang: LangId, bumpExec: boolean) => (d: Notebook) => {
-      const c = d.cells.find((x) => x.id === id);
-      if (!c || !isCode(c)) return;
-      c.outputs = outputs;
-      c.ranWith = lang;
-      if (bumpExec) {
-        d.counter += 1;
-        c.execN = d.counter;
-      }
-    },
+  setOutputs: (id: string, outputs: Output[], lang: LangId) => (d: Notebook) => {
+    const c = d.cells.find((x) => x.id === id);
+    if (!c || !isCode(c)) return;
+    c.outputs = outputs;
+    c.ranWith = lang;
+  },
   insert: (index: number | null, cell: Cell) => (d: Notebook) => {
     d.cells.splice(index == null ? d.cells.length : index, 0, cell);
   },
@@ -489,11 +484,9 @@ export const ops = {
     for (const c of d.cells) {
       if (isCode(c)) {
         c.outputs = [];
-        c.execN = undefined;
         c.ranWith = undefined;
       }
     }
-    d.counter = 0;
   },
 };
 

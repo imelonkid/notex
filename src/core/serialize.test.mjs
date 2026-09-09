@@ -10,7 +10,6 @@ const {
   markdownToNotebook,
   outputsToJson,
   applyOutputsJson,
-  normalizeExecCounters,
 } = await import('./serialize.ts');
 const { notebookToIpynb, ipynbToNotebook } = await import('./ipynb.ts');
 
@@ -30,7 +29,6 @@ function test(name, fn) {
 const sample = {
   id: 'nb1',
   title: '混合语言笔记',
-  counter: 3,
   created: '2026-01-01T00:00:00.000Z',
   updated: '2026-01-02T00:00:00.000Z',
   cells: [
@@ -44,7 +42,6 @@ const sample = {
         { type: 'stream', name: 'stdout', text: '你好\n' },
         { type: 'result', data: { 'text/html': '<table><tr><td>1</td></tr></table>', 'text/plain': '3' } },
       ],
-      execN: 1,
       ranWith: 'java',
     },
     { id: 'c3', type: 'md', source: '中间的说明文字' },
@@ -54,10 +51,9 @@ const sample = {
       lang: 'python',
       source: "print('hi')\nsum([1, 2])",
       outputs: [{ type: 'error', ename: 'ValueError', evalue: '坏了', traceback: ['  行 1'] }],
-      execN: 2,
       ranWith: 'python',
     },
-    { id: 'c5', type: 'code', lang: 'js', source: 'const a = 1;\na + 1', outputs: [], execN: 3 },
+    { id: 'c5', type: 'code', lang: 'js', source: 'const a = 1;\na + 1', outputs: [] },
   ],
 };
 
@@ -122,55 +118,6 @@ test('旁车输出能还原', () => {
   assert.equal(c2.outputs.length, 2);
   assert.equal(c2.outputs[0].text, '你好\n');
   assert.equal(c2.outputs[1].data['text/html'], '<table><tr><td>1</td></tr></table>');
-  assert.equal(c2.execN, 1);
-});
-
-console.log('\n执行序号规整');
-
-const withExecN = (nums) => ({
-  ...sample,
-  counter: 99,
-  cells: nums.map((n, i) => ({
-    id: 'c' + i,
-    type: 'code',
-    lang: 'python',
-    source: '',
-    outputs: [],
-    execN: n,
-  })),
-});
-
-test('压缩成 1..n，相对顺序不变', () => {
-  const nb = normalizeExecCounters(withExecN([1, 14, 3]));
-  assert.deepEqual(nb.cells.map((c) => c.execN), [1, 3, 2]);
-  assert.equal(nb.counter, 3);
-});
-
-test('已经紧凑时保持不变', () => {
-  const nb = normalizeExecCounters(withExecN([1, 2, 3]));
-  assert.deepEqual(nb.cells.map((c) => c.execN), [1, 2, 3]);
-});
-
-test('未运行的 cell 不参与编号', () => {
-  const nb = normalizeExecCounters({
-    ...sample,
-    counter: 50,
-    cells: [
-      { id: 'a', type: 'code', lang: 'python', source: '', outputs: [], execN: 7 },
-      { id: 'b', type: 'code', lang: 'python', source: '', outputs: [] },
-      { id: 'c', type: 'md', source: '文本' },
-      { id: 'd', type: 'code', lang: 'python', source: '', outputs: [], execN: 2 },
-    ],
-  });
-  assert.equal(nb.cells[0].execN, 2);
-  assert.equal(nb.cells[1].execN, undefined);
-  assert.equal(nb.cells[3].execN, 1);
-  assert.equal(nb.counter, 2);
-});
-
-test('都没运行过时计数器归零', () => {
-  const nb = normalizeExecCounters({ ...sample, counter: 42, cells: [{ id: 'x', type: 'md', source: '' }] });
-  assert.equal(nb.counter, 0);
 });
 
 console.log('\n隐藏元数据');
@@ -237,10 +184,9 @@ test('cell 类型、语言、源码保持', () => {
   assert.deepEqual(codes.map((c) => c.source), orig.map((c) => c.source));
 });
 
-test('输出与执行计数保持', () => {
+test('输出保持', () => {
   const back = ipynbToNotebook(notebookToIpynb(sample));
   const c2 = back.cells.filter((c) => c.type === 'code')[0];
-  assert.equal(c2.execN, 1);
   assert.equal(c2.outputs[0].type, 'stream');
   assert.equal(c2.outputs[0].text, '你好\n');
   assert.equal(c2.outputs[1].data['text/plain'], '3');
@@ -259,7 +205,7 @@ test('base64 图像不被按行切分', () => {
   const nb = {
     ...sample,
     cells: [
-      { id: 'i1', type: 'code', lang: 'java', execN: 1, outputs: [
+      { id: 'i1', type: 'code', lang: 'java', outputs: [
         { type: 'result', data: { 'image/png': 'iVBORw0KGgoAAAANSUhEUg==', 'text/plain': 'img' } },
       ], source: 'im' },
     ],

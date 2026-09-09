@@ -154,28 +154,9 @@ export function markdownToNotebook(text: string, fallbackTitle = '未命名笔�
     meta,
     title: fm.title || fallbackTitle,
     cells,
-    counter: 0,
     created: fm.created || now,
     updated: fm.updated || now,
   };
-}
-
-/**
- * 把执行序号压缩成 1..n。
- *
- * 序号本身只表达"谁先跑的"，而计数器是跨会话累加的，
- * 于是一篇只有三个 cell 的笔记可能显示 [1] [14] [3]，看起来像坏了。
- * 打开时按原有先后重新编号，相对顺序不变，数字始终紧凑。
- */
-export function normalizeExecCounters(nb: Notebook): Notebook {
-  const ran = nb.cells
-    .filter((c): c is CodeCell => c.type === 'code' && typeof c.execN === 'number')
-    .sort((a, b) => (a.execN ?? 0) - (b.execN ?? 0));
-  ran.forEach((cell, i) => {
-    cell.execN = i + 1;
-  });
-  nb.counter = ran.length;
-  return nb;
 }
 
 /** 旁车输出文件：cell id → outputs */
@@ -183,7 +164,7 @@ export function outputsToJson(nb: Notebook): string {
   const map: Record<string, unknown> = {};
   for (const cell of nb.cells) {
     if (cell.type === 'code' && cell.outputs.length) {
-      map[cell.id] = { outputs: cell.outputs, execN: cell.execN, ranWith: cell.ranWith };
+      map[cell.id] = { outputs: cell.outputs, ranWith: cell.ranWith };
     }
   }
   return JSON.stringify({ notex: 1, cells: map }, null, 2);
@@ -201,7 +182,6 @@ export function applyOutputsJson(nb: Notebook, json: string): Notebook {
     const saved = cell.type === 'code' ? map[cell.id] : undefined;
     if (cell.type === 'code' && saved) {
       cell.outputs = saved.outputs ?? [];
-      cell.execN = saved.execN;
       cell.ranWith = saved.ranWith;
     }
   }

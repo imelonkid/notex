@@ -4,6 +4,7 @@ import {
   LANGS,
   type Cell as CellModel,
   type LangId,
+  type RunMark,
   cellBadge,
   cellStatus,
 } from '@core/model';
@@ -19,6 +20,8 @@ interface Props {
   index: number;
   editing: boolean;
   running: boolean;
+  /** 本次会话里这个 cell 的执行结果，未运行则没有 */
+  mark?: RunMark;
   /** 运行中的额外说明，例如"正在解析依赖…" */
   busyNote?: string;
   /** 判断一个站内链接是否解析不到目标 */
@@ -45,6 +48,14 @@ interface Props {
   onRetryDetect(): void;
   onOpenSettings(): void;
 }
+
+/** 悬停提示：把括号里那个符号说清楚，用户不必猜 */
+const RUN_TITLE: Record<string, string> = {
+  idle: '本次会话还没运行过 — 点击运行（⌘↩）',
+  ok: '本次会话已运行成功 — 点击重新运行（⌘↩）',
+  error: '本次会话运行出错 — 点击重新运行（⌘↩）',
+  aborted: '本次会话运行被中断 — 点击重新运行（⌘↩）',
+};
 
 function renderMarkdown(src: string): string {
   if (!src.trim()) return '<p class="nx-md-empty">（空文本 — 双击编辑）</p>';
@@ -161,8 +172,8 @@ export function Cell(props: Props) {
   }, [html, props.isBrokenLink]);
 
   const isCode = cell.type === 'code';
-  const status = cellStatus(cell, running);
-  const badge = cellBadge(cell, running);
+  const status = cellStatus(cell, running, props.mark);
+  const badge = cellBadge(status);
 
   return (
     <div
@@ -201,16 +212,16 @@ export function Cell(props: Props) {
           </span>
           {isCode ? (
             <button
-              className="nx-execn"
+              className="nx-runmark"
               data-status={status}
-              title={running ? '中断执行' : '运行这个 cell（⌘↩）'}
+              title={running ? '中断执行' : RUN_TITLE[status]}
               onClick={(e) => {
                 e.stopPropagation();
                 running ? props.onInterrupt() : props.onRun();
               }}
             >
-              <span className="nx-execn-badge">{badge}</span>
-              <span className="nx-execn-run">{running ? '■' : '▶'}</span>
+              <span className="nx-runmark-badge">{badge}</span>
+              <span className="nx-runmark-run">{running ? '■' : '▶'}</span>
             </button>
           ) : null}
         </div>

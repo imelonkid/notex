@@ -30,7 +30,6 @@ export interface CodeCell {
   lang: LangId;
   source: string;
   outputs: Output[];
-  execN?: number;
   /** 产生当前 outputs 的语言，用于提示"上次以 X 运行" */
   ranWith?: LangId;
 }
@@ -58,7 +57,6 @@ export interface Notebook {
   id: string;
   title: string;
   cells: Cell[];
-  counter: number;
   created: string;
   updated: string;
   meta?: NoteMeta;
@@ -84,28 +82,34 @@ export function uid(prefix = 'c'): string {
 }
 
 /**
- * 代码 cell 的执行状态，决定装订线上序号的颜色。
- * 参考 Jupyter 的 [ ] / [*] / [n]，但用颜色额外区分成功与失败。
+ * 一个 cell 在**本次会话**里的执行结果。
+ * 只活在内存里，不进文件：页面重新加载后一切归零，
+ * 因为那时内核也是全新的，声称"跑过"就是假的。
  */
-export type CellStatus = 'idle' | 'running' | 'ok' | 'error' | 'aborted';
+export type RunMark = 'ok' | 'error' | 'aborted';
 
-export function cellStatus(cell: Cell, running: boolean): CellStatus {
+export type CellStatus = 'idle' | 'running' | RunMark;
+
+export function cellStatus(cell: Cell, running: boolean, mark?: RunMark): CellStatus {
   if (running) return 'running';
   if (cell.type !== 'code') return 'idle';
-  const err = cell.outputs.find((o) => o.type === 'error');
-  if (err && err.type === 'error') {
-    // 中断不是失败，用不同的颜色提示
-    return err.ename === 'KeyboardInterrupt' ? 'aborted' : 'error';
-  }
-  if (cell.outputs.some((o) => o.type === 'missing-runtime')) return 'error';
-  return cell.execN ? 'ok' : 'idle';
+  return mark ?? 'idle';
 }
 
-/** 装订线上显示的标记 */
-export function cellBadge(cell: Cell, running: boolean): string {
-  if (running) return '[*]';
-  if (cell.type !== 'code') return '';
-  return cell.execN ? `[${cell.execN}]` : '[ ]';
+/** 装订线上的标记：括号里画的是这个 cell 在本次会话里发生了什么 */
+export function cellBadge(status: CellStatus): string {
+  switch (status) {
+    case 'running':
+      return '[*]';
+    case 'ok':
+      return '[✓]';
+    case 'error':
+      return '[✗]';
+    case 'aborted':
+      return '[–]';
+    default:
+      return '[ ]';
+  }
 }
 
 export function isCode(cell: Cell): cell is CodeCell {
@@ -125,7 +129,6 @@ export function newNotebook(title = '未命名笔记'): Notebook {
   return {
     id: uid('nb'),
     title,
-    counter: 0,
     created: now,
     updated: now,
     meta: { uid: newNoteUid() },

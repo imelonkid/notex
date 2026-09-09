@@ -19,7 +19,6 @@ function seed(): Workspace {
   const nb: Notebook = {
     id: 'nb-welcome',
     title: '欢迎使用 NoteX',
-    counter: 0,
     created: new Date().toISOString(),
     updated: new Date().toISOString(),
     cells: [
@@ -165,16 +164,12 @@ export const actions = {
       if (c && isCode(c)) c.lang = lang;
     }),
 
-  setOutputs: (ws: Workspace, cellId: string, outputs: Output[], lang: LangId, bumpExec: boolean) =>
+  setOutputs: (ws: Workspace, cellId: string, outputs: Output[], lang: LangId) =>
     mutate(ws, (nb) => {
       const c = nb.cells.find((x) => x.id === cellId);
       if (!c || !isCode(c)) return;
       c.outputs = outputs;
       c.ranWith = lang;
-      if (bumpExec) {
-        nb.counter += 1;
-        c.execN = nb.counter;
-      }
     }),
 
   insertCell: (ws: Workspace, index: number | null, type: 'md' | 'code', lang: LangId) => {
@@ -208,11 +203,9 @@ export const actions = {
       for (const c of nb.cells) {
         if (isCode(c)) {
           c.outputs = [];
-          c.execN = undefined;
           c.ranWith = undefined;
         }
       }
-      nb.counter = 0;
     }),
 
   addNotebook: (ws: Workspace): Workspace => {

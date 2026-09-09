@@ -22,6 +22,7 @@ const CACHE_KEY = 'nx.runtimes.v1';
 export class RuntimeRegistry {
   private states = new Map<LangId, LangState>();
   private listeners = new Set<() => void>();
+  private restartListeners = new Set<(lang: LangId) => void>();
   private launching = new Map<LangId, Promise<KernelSession | null>>();
 
   constructor(
@@ -41,6 +42,15 @@ export class RuntimeRegistry {
 
   private emit() {
     this.listeners.forEach((cb) => cb());
+  }
+
+  /**
+   * 内核重启时通知外面。界面据此清掉这门语言的执行标记：
+   * 新内核里什么都没跑过，装订线上的对号就不再成立。
+   */
+  onRestart(cb: (lang: LangId) => void): () => void {
+    this.restartListeners.add(cb);
+    return () => this.restartListeners.delete(cb);
   }
 
   get(lang: LangId): LangState {
@@ -187,6 +197,7 @@ export class RuntimeRegistry {
     const s = this.get(lang);
     if (s.session) await s.session.dispose();
     this.patch(lang, { session: undefined, status: s.info ? 'available' : 'unknown' });
+    this.restartListeners.forEach((cb) => cb(lang));
     return this.ensure(lang);
   }
 
