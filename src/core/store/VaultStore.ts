@@ -135,8 +135,10 @@ export class VaultStore implements NotebookStore {
   }
 
   async remove(id: string): Promise<void> {
-    await this.host.removeFile(this.mdPath(id)).catch(() => undefined);
+    // 正文删不掉是真问题，必须抛出去；旁车文件本来就可能不存在
+    await this.host.removeFile(this.mdPath(id));
     await this.host.removeFile(this.outputsPath(id)).catch(() => undefined);
+    this.seen.delete(id);
   }
 
   async retitle(id: string, title: string): Promise<string> {

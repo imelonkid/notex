@@ -25,6 +25,8 @@ export function useNotebook(store: NotebookStore | null) {
   const [error, setError] = useState<string | null>(null);
   /** 文件在外部被改动，且本地有未保存改动时提示用户抉择 */
   const [conflict, setConflict] = useState(false);
+  /** 当前这篇的文件在应用之外被删掉了 */
+  const [missingFile, setMissingFile] = useState(false);
 
   const nbRef = useRef<Notebook | null>(null);
   nbRef.current = nb;
@@ -33,6 +35,12 @@ export function useNotebook(store: NotebookStore | null) {
   const initialized = useRef<NotebookStore | null>(null);
   /** 有尚未写盘的本地改动 */
   const dirty = useRef(false);
+  /** 回调里要读最新的选中项，state 会被闭包捕获成旧值 */
+  const activeIdRef = useRef<string | null>(null);
+  const missingFileRef = useRef(false);
+
+  activeIdRef.current = activeId;
+  missingFileRef.current = missingFile;
 
   const refresh = useCallback(async () => {
     if (!store) return [];
@@ -53,6 +61,10 @@ export function useNotebook(store: NotebookStore | null) {
       if (timer.current) {
         clearTimeout(timer.current);
         timer.current = null;
+      }
+      if (!force && missingFileRef.current) {
+        // 文件已被外部删除，自动保存不该把它悄悄复活
+        return;
       }
       if (!force && store.changedOutside) {
         try {
@@ -129,6 +141,7 @@ export function useNotebook(store: NotebookStore | null) {
         setActiveId(id);
         setError(null);
         setConflict(false);
+        setMissingFile(false);
         dirty.current = false;
       } else {
         setError(`打不开笔记：${id}`);
@@ -166,25 +179,52 @@ export function useNotebook(store: NotebookStore | null) {
   }, [store]);
 
   /**
-   * 轮询文件时间，发现外部改动。
-   * 本地没有未保存改动就直接重新加载，有的话交给用户决定，
-   * 绝不静默覆盖别处写入的内容。
+   * 检查笔记库与内存是否一致：目录里有哪些笔记，当前这篇是否被改动或删除。
+   * 目录是唯一事实来源，应用只是展示它。
    */
+  const checkExternal = useCallback(async () => {
+    if (!store) return;
+    try {
+      const list = await store.list();
+      setRefs((prev) => {
+        const same = prev.length === list.length && prev.every((r, i) => r.id === list[i].id);
+        return same ? prev : list;
+      });
+
+      const active = activeIdRef.current;
+      if (!active) return;
+
+      const stillThere = list.some((r) => r.id === active);
+      setMissingFile(!stillThere);
+      if (!stillThere || !store.changedOutside) return;
+
+      // 文件还在但内容变了：没有本地改动就直接读回来，
+      // 有的话交给用户决定，绝不静默覆盖别处写入的内容
+      if (await store.changedOutside(active)) {
+        if (dirty.current) setConflict(true);
+        else await reloadFromDisk();
+      }
+    } catch {
+      // 目录临时读不到，等下一轮
+    }
+  }, [store, reloadFromDisk]);
+
   useEffect(() => {
-    if (!store?.changedOutside || !activeId) return;
-    const id = setInterval(() => {
-      void (async () => {
-        try {
-          if (!(await store.changedOutside!(activeId))) return;
-          if (dirty.current) setConflict(true);
-          else await reloadFromDisk();
-        } catch {
-          // 文件被删或临时读不到，等下一轮
-        }
-      })();
-    }, WATCH_INTERVAL_MS);
-    return () => clearInterval(id);
-  }, [store, activeId, reloadFromDisk]);
+    if (!store) return;
+    const timerId = setInterval(() => void checkExternal(), WATCH_INTERVAL_MS);
+    // 窗口在后台时浏览器会把定时器降频，切回来要立刻对一次，
+    // 否则用户在别处改完文件回到应用还会看到旧状态
+    const onBack = () => {
+      if (document.visibilityState === 'visible') void checkExternal();
+    };
+    window.addEventListener('focus', onBack);
+    document.addEventListener('visibilitychange', onBack);
+    return () => {
+      clearInterval(timerId);
+      window.removeEventListener('focus', onBack);
+      document.removeEventListener('visibilitychange', onBack);
+    };
+  }, [store, checkExternal]);
 
   // 关页面前把没写完的改动落盘
   useEffect(() => {
@@ -214,15 +254,32 @@ export function useNotebook(store: NotebookStore | null) {
   const removeNotebook = useCallback(
     async (id: string) => {
       if (!store) return;
-      await store.remove(id);
+      // 删的是当前这篇时，必须先取消待写盘的改动并清空内存副本。
+      // 否则接下来切换笔记时的 flush 会把刚删掉的内容原样写回磁盘。
+      if (id === activeIdRef.current) {
+        if (timer.current) {
+          clearTimeout(timer.current);
+          timer.current = null;
+        }
+        dirty.current = false;
+        nbRef.current = null;
+        setNb(null);
+      }
+      try {
+        await store.remove(id);
+      } catch (e) {
+        setError(`删除失败：${String((e as Error)?.message ?? e)}`);
+        return;
+      }
       const list = await store.list();
       setRefs(list);
-      if (id === activeId) {
+      if (id === activeIdRef.current) {
+        setActiveId(null);
         if (list.length) await open(list[0].id);
         else await createNotebook('未命名笔记');
       }
     },
-    [store, activeId, open, createNotebook],
+    [store, open, createNotebook],
   );
 
   const retitle = useCallback(
@@ -267,6 +324,7 @@ export function useNotebook(store: NotebookStore | null) {
     saving,
     error,
     conflict,
+    missingFile,
     reloadFromDisk,
     keepMine: () => {
       setConflict(false);
@@ -276,6 +334,7 @@ export function useNotebook(store: NotebookStore | null) {
     update,
     flush,
     refresh,
+    checkExternal,
     createNotebook,
     removeNotebook,
     retitle,

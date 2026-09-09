@@ -345,6 +345,15 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
         <div className="nx-page">
           {linkNotice && <div className="nx-banner">{linkNotice}</div>}
           {book.error && <div className="nx-banner nx-banner-error">{book.error}</div>}
+          {book.missingFile && (
+            <div className="nx-banner nx-banner-warn">
+              <span>这篇笔记的文件已不在笔记库里，可能是在应用外被删除或移动了。自动保存已暂停。</span>
+              <span style={{ flex: 1 }} />
+              <button className="nx-btn-mini" onClick={() => void book.flush(true)}>
+                重新写回磁盘
+              </button>
+            </div>
+          )}
           {book.conflict && (
             <div className="nx-banner nx-banner-warn">
               <span>这篇笔记的文件在应用之外被修改了，而你这里也有未保存的改动。</span>
