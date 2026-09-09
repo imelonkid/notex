@@ -2,10 +2,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { LANGS, isCode, type LangId, type Output } from '@core/model';
 import { exportIpynb, exportMarkdown, importNotebook } from '@core/files';
 import { parseDeps } from '@core/deps';
+import { resolveNoteLink } from '@core/links';
 import type { StoreSetup } from '@core/store/index';
 import { Cell } from './components/Cell';
 import { SettingsModal } from './components/SettingsModal';
 import { useRuntimes } from './RuntimeContext';
+import { scrollToHeadingText, useLinkInterceptor } from './useLinkInterceptor';
 import { newCodeCell, newMarkdownCell, ops, useNotebook } from './useNotebook';
 
 export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChanged(): void }) {
@@ -24,6 +26,57 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
 
   const nbRef = useRef(book.nb);
   nbRef.current = book.nb;
+
+  /** 正文与输出里的链接一律由应用接管，webview 绝不自己导航 */
+  const [linkNotice, setLinkNotice] = useState<string | null>(null);
+  /** 跳转到目标笔记后要滚到的小节，等目标渲染完再用 */
+  const pendingHash = useRef<string | null>(null);
+  const refsRef = useRef(book.refs);
+  refsRef.current = book.refs;
+  const activeIdRef = useRef(book.activeId);
+  activeIdRef.current = book.activeId;
+
+  const openInternalLink = useCallback(
+    (target: string, hash?: string) => {
+      // 只写了 #小节 的情况已在拦截器里当锚点处理，这里一定有 target
+      const id = resolveNoteLink(target, refsRef.current);
+      if (!id) {
+        setLinkNotice(`找不到这篇笔记：${target}`);
+        return;
+      }
+      if (id === activeIdRef.current) {
+        if (hash) scrollToHeadingText(hash);
+        return;
+      }
+      pendingHash.current = hash ?? null;
+      setEditingId(null);
+      void book.open(id);
+    },
+    [book],
+  );
+
+  useLinkInterceptor({
+    host,
+    onInternal: openInternalLink,
+    onBlocked: useCallback((href: string, reason: string) => {
+      setLinkNotice(`已拦截链接（${reason}）：${href}`);
+    }, []),
+  });
+
+  // 目标笔记渲染完成后再滚动到小节
+  useEffect(() => {
+    if (!book.nb || !pendingHash.current) return;
+    const hash = pendingHash.current;
+    pendingHash.current = null;
+    const t = setTimeout(() => scrollToHeadingText(hash), 80);
+    return () => clearTimeout(t);
+  }, [book.nb]);
+
+  useEffect(() => {
+    if (!linkNotice) return;
+    const t = setTimeout(() => setLinkNotice(null), 4000);
+    return () => clearTimeout(t);
+  }, [linkNotice]);
 
   useEffect(() => {
     localStorage.setItem('nx.sidebar.collapsed', sidebarCollapsed ? '1' : '0');
@@ -290,6 +343,7 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
 
       <main className="nx-main">
         <div className="nx-page">
+          {linkNotice && <div className="nx-banner">{linkNotice}</div>}
           {book.error && <div className="nx-banner nx-banner-error">{book.error}</div>}
           {book.conflict && (
             <div className="nx-banner nx-banner-warn">

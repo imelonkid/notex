@@ -78,6 +78,12 @@ export interface HostBridge {
   joinPath(...parts: string[]): string;
 
   /**
+   * 用系统默认浏览器打开外部链接。
+   * 绝不能让应用自己的 webview 去导航：那样整个界面会被网页替换掉。
+   */
+  openExternal(url: string): Promise<void>;
+
+  /**
    * 打开系统的目录选择器。只有桌面壳能做到，
    * 浏览器与开发服务器下返回 null，由界面退回手工填路径。
    */

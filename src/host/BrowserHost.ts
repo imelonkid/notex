@@ -65,6 +65,10 @@ export class BrowserHost implements HostBridge {
   async renameFile(): Promise<void> {
     throw new HostCapabilityError('重命名文件');
   }
+  async openExternal(url: string): Promise<void> {
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }
+
   joinPath(...parts: string[]): string {
     return parts.filter(Boolean).join('/');
   }

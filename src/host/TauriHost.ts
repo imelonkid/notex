@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
+import { open as openInSystem } from '@tauri-apps/plugin-shell';
 import { resolveDepsWithHost } from '@core/deps/resolve';
 import {
   type ChildProcess,
@@ -150,6 +151,10 @@ export class TauriHost implements HostBridge {
 
   async renameFile(from: string, to: string): Promise<void> {
     await invoke('rename_file', { from, to });
+  }
+
+  async openExternal(url: string): Promise<void> {
+    await openInSystem(url);
   }
 
   joinPath(...parts: string[]): string {

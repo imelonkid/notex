@@ -2,10 +2,13 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "NoteX 主窗口所需的能力",
-  "windows": ["main"],
+  "windows": [
+    "main"
+  ],
   "permissions": [
     "core:default",
     "dialog:allow-open",
-    "shell:default"
+    "shell:default",
+    "shell:allow-open"
   ]
 }

@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { marked } from 'marked';
 import { LANGS, type Cell as CellModel, type LangId } from '@core/model';
+import { expandWikiLinks } from '@core/links';
 import { CodeEditor } from '../editor/CodeEditor';
 import { useRuntimes } from '../RuntimeContext';
 import { Outputs } from './Outputs';
@@ -33,7 +34,8 @@ interface Props {
 function renderMarkdown(src: string): string {
   if (!src.trim()) return '<p class="nx-md-empty">（空文本 — 双击编辑）</p>';
   try {
-    return marked.parse(src, { breaks: true, gfm: true, async: false }) as string;
+    // [[笔记名]] 先展开成普通链接，两种写法后续走同一条拦截逻辑
+    return marked.parse(expandWikiLinks(src), { breaks: true, gfm: true, async: false }) as string;
   } catch {
     return `<p>${src.replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' })[c] ?? c)}</p>`;
   }

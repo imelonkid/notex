@@ -197,6 +197,10 @@ export class DevServerHost implements HostBridge {
     await postJson('/rename', { from, to });
   }
 
+  async openExternal(url: string): Promise<void> {
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }
+
   joinPath(...parts: string[]): string {
     const sep = this.plat === 'win32' ? '\\' : '/';
     return parts
