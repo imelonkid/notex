@@ -336,12 +336,12 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
   const openFolderMenu = (dir: string, x: number, y: number) => {
     const inside = book.refs.filter((r) => r.dir === dir || r.dir.startsWith(dir + '/'));
     const items: MenuItem[] = [
-      { label: '在此新建笔记', onSelect: () => void book.createNotebook('未命名笔记', dir) },
+      { label: '新建笔记', onSelect: () => void book.createNotebook('未命名笔记', dir) },
       {
         label:
           depthOf(dir) >= MAX_DIR_DEPTH
-            ? `在此新建文件夹（已达 ${MAX_DIR_DEPTH} 级上限）`
-            : '在此新建文件夹',
+            ? `新建文件夹（已达 ${MAX_DIR_DEPTH} 级上限）`
+            : '新建文件夹',
         disabled: depthOf(dir) >= MAX_DIR_DEPTH,
         onSelect: () => {
           const name = window.prompt('新文件夹名称', '新文件夹');
