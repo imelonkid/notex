@@ -2,8 +2,17 @@
 /** 笔记库路径与排序测试。用法：pnpm test:paths */
 import assert from 'node:assert/strict';
 
-const { safeSegments, isSafeId, dirOf, baseOf, joinId, depthOf, compareNames, shouldSkipDir } =
-  await import('./paths.ts');
+const {
+  safeSegments,
+  isSafeId,
+  dirOf,
+  baseOf,
+  joinId,
+  depthOf,
+  compareNames,
+  shouldSkipDir,
+  MAX_DIR_DEPTH,
+} = await import('./paths.ts');
 const { slugify } = await import('./VaultStore.ts');
 
 let passed = 0;
@@ -109,6 +118,17 @@ test('大小写不影响相对顺序', () => {
   const names = ['beta', 'Alpha'];
   names.sort(compareNames);
   assert.deepEqual(names, ['Alpha', 'beta']);
+});
+
+console.log('\n层级上限');
+
+test('上限是三级', () => {
+  assert.equal(MAX_DIR_DEPTH, 3);
+});
+
+test('三级以内的深度判断正确', () => {
+  assert.ok(depthOf('a/b/c') <= MAX_DIR_DEPTH);
+  assert.ok(depthOf('a/b/c/d') > MAX_DIR_DEPTH);
 });
 
 console.log('\n忽略目录');

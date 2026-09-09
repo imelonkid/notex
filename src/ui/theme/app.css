@@ -994,12 +994,19 @@ svg.nx-out-html {
   top: -4px;
   margin-left: 2px;
   min-width: 150px;
-  max-height: 60vh;
-  overflow-y: auto;
+  /* 不能设 overflow：它会裁掉再下一级的绝对定位菜单。
+     目录层级已限制为三级，列表不会长到需要滚动。 */
   padding: 4px;
   background: var(--nx-bg);
   border: 1px solid var(--nx-border-strong);
   border-radius: var(--nx-radius);
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.16);
   z-index: 1;
+}
+/* 靠近窗口右缘时朝左展开 */
+.nx-submenu[data-flip='true'] {
+  left: auto;
+  right: 100%;
+  margin-left: 0;
+  margin-right: 2px;
 }

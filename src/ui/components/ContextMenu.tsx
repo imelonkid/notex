@@ -97,12 +97,29 @@ function MenuList({ items, onClose }: { items: MenuItem[]; onClose(): void }) {
             {item.children?.length ? <span className="nx-menu-arrow">›</span> : null}
           </button>
           {openIndex === i && item.children?.length ? (
-            <div className="nx-submenu">
-              <MenuList items={item.children} onClose={onClose} />
-            </div>
+            <Submenu items={item.children} onClose={onClose} />
           ) : null}
         </div>
       ))}
     </>
+  );
+}
+
+/** 二级及更深的菜单，贴不下时朝左展开 */
+function Submenu({ items, onClose }: { items: MenuItem[]; onClose(): void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [flip, setFlip] = useState(false);
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    setFlip(rect.right > window.innerWidth - 8);
+  }, [items]);
+
+  return (
+    <div ref={ref} className="nx-submenu" data-flip={flip ? 'true' : undefined}>
+      <MenuList items={items} onClose={onClose} />
+    </div>
   );
 }

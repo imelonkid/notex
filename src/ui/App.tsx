@@ -3,7 +3,7 @@ import { LANGS, isCode, type LangId, type Output } from '@core/model';
 import { exportIpynb, exportMarkdown, importNotebook } from '@core/files';
 import { parseDeps } from '@core/deps';
 import { resolveNoteLink } from '@core/links';
-import { baseOf, dirOf, joinId } from '@core/store/paths';
+import { MAX_DIR_DEPTH, baseOf, depthOf, dirOf, joinId } from '@core/store/paths';
 import type { StoreSetup } from '@core/store/index';
 import { Cell } from './components/Cell';
 import { NoteTree } from './components/NoteTree';
@@ -340,7 +340,11 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
     const items: MenuItem[] = [
       { label: '在此新建笔记', onSelect: () => void book.createNotebook('未命名笔记', dir) },
       {
-        label: '在此新建文件夹',
+        label:
+          depthOf(dir) >= MAX_DIR_DEPTH
+            ? `在此新建文件夹（已达 ${MAX_DIR_DEPTH} 级上限）`
+            : '在此新建文件夹',
+        disabled: depthOf(dir) >= MAX_DIR_DEPTH,
         onSelect: () => {
           const name = window.prompt('新文件夹名称', '新文件夹');
           if (name?.trim()) void book.createFolder(joinId(dir, name.trim()));
