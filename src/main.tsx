@@ -7,6 +7,7 @@ import { ThemeProvider, useTheme, type ThemePack } from './ui/theme/ThemeProvide
 import { RuntimeProvider } from './ui/RuntimeContext';
 import { detectHost } from './host/DevServerHost';
 import type { HostBridge } from './host/HostBridge';
+import { openStore, type StoreSetup } from './core/store/index';
 
 /**
  * 加载主题包。优先问宿主，它会合并内置 themes/ 与用户 ~/.notex/themes/；
@@ -48,20 +49,39 @@ function ThemeLoader({ children }: { children: React.ReactNode }) {
 
 function Boot() {
   const [host, setHost] = useState<HostBridge | null>(null);
+  const [setup, setSetup] = useState<StoreSetup | null>(null);
+  // 改了 vault 之后重新打开存储
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     void detectHost().then(setHost);
   }, []);
 
-  if (!host) {
+  useEffect(() => {
+    if (!host) return;
+    let cancelled = false;
+    setSetup(null);
+    void openStore(host).then((s) => !cancelled && setSetup(s));
+    return () => {
+      cancelled = true;
+    };
+  }, [host, reloadKey]);
+
+  if (!host || !setup) {
     return (
-      <div style={{ padding: 40, color: 'var(--nx-fg-faint)', fontSize: 13 }}>正在连接宿主…</div>
+      <div style={{ padding: 40, color: 'var(--nx-fg-faint)', fontSize: 13 }}>
+        {host ? '正在打开笔记库…' : '正在连接宿主…'}
+      </div>
     );
   }
 
   return (
     <RuntimeProvider host={host}>
-      <App />
+      <App
+        key={setup.vaultPath || 'local'}
+        setup={setup}
+        onVaultChanged={() => setReloadKey((k) => k + 1)}
+      />
     </RuntimeProvider>
   );
 }

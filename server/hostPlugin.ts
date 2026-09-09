@@ -6,7 +6,7 @@
 import type { Plugin, ViteDevServer } from 'vite';
 import { spawn as nodeSpawn, execFile, type ChildProcess as NodeChild } from 'node:child_process';
 import { promisify } from 'node:util';
-import { readFile, writeFile, access, readdir, mkdir, stat } from 'node:fs/promises';
+import { readFile, writeFile, access, readdir, mkdir, stat, rm, rename } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import os from 'node:os';
@@ -274,7 +274,56 @@ export function hostPlugin(): Plugin {
           }
           if (url.pathname === '/write' && req.method === 'POST') {
             const body = await readBody(req);
+            await mkdir(path.dirname(body.path), { recursive: true });
             await writeFile(body.path, body.content, 'utf8');
+            return json(res, 200, { ok: true });
+          }
+          if (url.pathname === '/home') {
+            return json(res, 200, { home: os.homedir() });
+          }
+          if (url.pathname === '/list') {
+            const dir = url.searchParams.get('path') ?? '';
+            try {
+              const items = await readdir(dir, { withFileTypes: true });
+              const entries = await Promise.all(
+                items.map(async (it) => {
+                  let modified: string | undefined;
+                  try {
+                    modified = (await stat(path.join(dir, it.name))).mtime.toISOString();
+                  } catch {
+                    /* 读不到时间不影响列举 */
+                  }
+                  return { name: it.name, isDir: it.isDirectory(), modified };
+                }),
+              );
+              return json(res, 200, { entries });
+            } catch (e) {
+              return json(res, 200, { entries: [], error: String(e) });
+            }
+          }
+          if (url.pathname === '/stat') {
+            const target = url.searchParams.get('path') ?? '';
+            try {
+              const st = await stat(target);
+              return json(res, 200, { modified: st.mtime.toISOString(), size: st.size });
+            } catch {
+              return json(res, 200, { modified: null, size: 0 });
+            }
+          }
+          if (url.pathname === '/mkdir' && req.method === 'POST') {
+            const body = await readBody(req);
+            await mkdir(body.path, { recursive: true });
+            return json(res, 200, { ok: true });
+          }
+          if (url.pathname === '/remove' && req.method === 'POST') {
+            const body = await readBody(req);
+            await rm(body.path, { force: true });
+            return json(res, 200, { ok: true });
+          }
+          if (url.pathname === '/rename' && req.method === 'POST') {
+            const body = await readBody(req);
+            await mkdir(path.dirname(body.to), { recursive: true });
+            await rename(body.from, body.to);
             return json(res, 200, { ok: true });
           }
           if (url.pathname === '/deps' && req.method === 'POST') {

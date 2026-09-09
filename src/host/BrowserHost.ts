@@ -3,6 +3,7 @@ import {
   type ExecResult,
   type HostBridge,
   HostCapabilityError,
+  type DirEntry,
   type Platform,
   type ResolvedDeps,
 } from './HostBridge';
@@ -45,5 +46,26 @@ export class BrowserHost implements HostBridge {
   }
   async fileExists(): Promise<boolean> {
     return false;
+  }
+  async homeDir(): Promise<string> {
+    throw new HostCapabilityError('访问主目录');
+  }
+  async listDir(): Promise<DirEntry[]> {
+    throw new HostCapabilityError('列举目录');
+  }
+  async statFile(): Promise<string | null> {
+    return null;
+  }
+  async ensureDir(): Promise<void> {
+    throw new HostCapabilityError('创建目录');
+  }
+  async removeFile(): Promise<void> {
+    throw new HostCapabilityError('删除文件');
+  }
+  async renameFile(): Promise<void> {
+    throw new HostCapabilityError('重命名文件');
+  }
+  joinPath(...parts: string[]): string {
+    return parts.filter(Boolean).join('/');
   }
 }

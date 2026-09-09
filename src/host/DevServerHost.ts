@@ -3,6 +3,7 @@ import {
   type ExecResult,
   type HostBridge,
   type Platform,
+  type DirEntry,
   type ResolvedDeps,
   type SpawnOptions,
 } from './HostBridge';
@@ -167,6 +168,41 @@ export class DevServerHost implements HostBridge {
   async fileExists(path: string): Promise<boolean> {
     const r = await getJson<{ exists: boolean }>(`/exists?path=${encodeURIComponent(path)}`);
     return r.exists;
+  }
+
+  async homeDir(): Promise<string> {
+    const r = await getJson<{ home: string }>('/home');
+    return r.home;
+  }
+
+  async listDir(path: string): Promise<DirEntry[]> {
+    const r = await getJson<{ entries: DirEntry[] }>(`/list?path=${encodeURIComponent(path)}`);
+    return r.entries ?? [];
+  }
+
+  async statFile(path: string): Promise<string | null> {
+    const r = await getJson<{ modified: string | null }>(`/stat?path=${encodeURIComponent(path)}`);
+    return r.modified;
+  }
+
+  async ensureDir(path: string): Promise<void> {
+    await postJson('/mkdir', { path });
+  }
+
+  async removeFile(path: string): Promise<void> {
+    await postJson('/remove', { path });
+  }
+
+  async renameFile(from: string, to: string): Promise<void> {
+    await postJson('/rename', { from, to });
+  }
+
+  joinPath(...parts: string[]): string {
+    const sep = this.plat === 'win32' ? '\\' : '/';
+    return parts
+      .filter(Boolean)
+      .map((p, i) => (i === 0 ? p.replace(/[/\\]+$/, '') : p.replace(/^[/\\]+|[/\\]+$/g, '')))
+      .join(sep);
   }
 }
 

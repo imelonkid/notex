@@ -32,6 +32,13 @@ export interface ExecResult {
 
 export type Platform = 'darwin' | 'win32' | 'linux';
 
+export interface DirEntry {
+  name: string;
+  isDir: boolean;
+  /** 最后修改时间，ISO 字符串 */
+  modified?: string;
+}
+
 export interface ResolvedDeps {
   classpath: string[];
   resolver: 'maven' | 'direct';
@@ -58,4 +65,21 @@ export interface HostBridge {
   readText(path: string): Promise<string>;
   writeText(path: string, content: string): Promise<void>;
   fileExists(path: string): Promise<boolean>;
+
+  /** 用户主目录，用于推导默认 vault */
+  homeDir(): Promise<string>;
+  listDir(path: string): Promise<DirEntry[]>;
+  /** 文件的最后修改时间；不存在时返回 null */
+  statFile(path: string): Promise<string | null>;
+  ensureDir(path: string): Promise<void>;
+  removeFile(path: string): Promise<void>;
+  renameFile(from: string, to: string): Promise<void>;
+  /** 路径拼接由宿主做，避免前端猜分隔符 */
+  joinPath(...parts: string[]): string;
+
+  /**
+   * 打开系统的目录选择器。只有桌面壳能做到，
+   * 浏览器与开发服务器下返回 null，由界面退回手工填路径。
+   */
+  pickDirectory?(): Promise<string | null>;
 }
