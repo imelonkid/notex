@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="assets/icon.png" alt="NoteX" width="104" />
+
 # NoteX
 
 **代码即笔记，笔记可运行。**
@@ -246,6 +248,8 @@ server/         Vite 插件，开发期提供 spawn / exec / 文件能力
 kernels/        三个零依赖内核脚本
 src-tauri/      桌面壳，以 Rust 实现文件与进程能力
 themes/         主题包
+assets/         标识源文件与应用图标底稿
+public/         favicon 等随页面分发的静态文件
 docs/           架构设计与方案
 ```
 
