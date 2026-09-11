@@ -8,7 +8,8 @@ import {
   cellBadge,
   cellStatus,
 } from '@core/model';
-import { expandWikiLinks } from '@core/links';
+import { expandWikiLinks, safeDecode } from '@core/links';
+import { sanitizeMarkdown } from '../sanitize';
 import { CodeEditor } from '../editor/CodeEditor';
 import { useRuntimes } from '../RuntimeContext';
 import { Outputs } from './Outputs';
@@ -39,6 +40,9 @@ interface Props {
   onRun(): void;
   onInterrupt(): void;
   onRemove(): void;
+  /** 刚复制过，按钮上打勾 */
+  copied: boolean;
+  onCopy(): void;
   onEdit(): void;
   onDoneEdit(): void;
   onDragStart(): void;
@@ -51,17 +55,19 @@ interface Props {
 
 /** 悬停提示：把括号里那个符号说清楚，用户不必猜 */
 const RUN_TITLE: Record<string, string> = {
-  idle: '本次会话还没运行过 — 点击运行（⌘↩）',
-  ok: '本次会话已运行成功 — 点击重新运行（⌘↩）',
-  error: '本次会话运行出错 — 点击重新运行（⌘↩）',
-  aborted: '本次会话运行被中断 — 点击重新运行（⌘↩）',
+  idle: '本次会话还没运行过 — 点击运行（⇧↩）',
+  ok: '本次会话已运行成功 — 点击重新运行（⇧↩）',
+  error: '本次会话运行出错 — 点击重新运行（⇧↩）',
+  aborted: '本次会话运行被中断 — 点击重新运行（⇧↩）',
 };
 
 function renderMarkdown(src: string): string {
   if (!src.trim()) return '<p class="nx-md-empty">（空文本 — 双击编辑）</p>';
   try {
-    // [[笔记名]] 先展开成普通链接，两种写法后续走同一条拦截逻辑
-    return marked.parse(expandWikiLinks(src), { breaks: true, gfm: true, async: false }) as string;
+    // [[笔记名]] 先展开成普通链接，两种写法后续走同一条拦截逻辑；
+    // 渲染结果必须净化后才能进 DOM，正文内容不一定是自己写的
+    const html = marked.parse(expandWikiLinks(src), { breaks: true, gfm: true, async: false }) as string;
+    return sanitizeMarkdown(html);
   } catch {
     return `<p>${src.replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' })[c] ?? c)}</p>`;
   }
@@ -131,6 +137,46 @@ function LangChip({ current, onPick }: { current: LangId; onPick(l: LangId): voi
   );
 }
 
+/** 复制按钮。停在 cell 右上角，鼠标移到 cell 上或 cell 是当前项时才现身 */
+function CopyButton({ copied, onCopy }: { copied: boolean; onCopy(): void }) {
+  return (
+    <button
+      className="nx-cell-copy"
+      data-copied={copied || undefined}
+      title={copied ? '已复制' : '复制原文（⇧⌘C）'}
+      aria-label="复制这个 cell 的原文"
+      onClick={(e) => {
+        e.stopPropagation();
+        onCopy();
+      }}
+    >
+      {copied ? (
+        <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">
+          <path
+            d="M3.5 8.5l3 3 6-6.5"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      ) : (
+        <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">
+          <rect x="5.6" y="2.4" width="8" height="9" rx="1.6" fill="none" stroke="currentColor" strokeWidth="1.3" />
+          <path
+            d="M10.4 13.6H4a1.6 1.6 0 0 1-1.6-1.6V5.2"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.3"
+            strokeLinecap="round"
+          />
+        </svg>
+      )}
+    </button>
+  );
+}
+
 export function Cell(props: Props) {
   const { cell, editing, running, busyNote, dropActive } = props;
   const { registry } = useRuntimes();
@@ -165,7 +211,7 @@ export function Cell(props: Props) {
       if (/^[a-z][a-z0-9+.-]*:/i.test(href) || href.startsWith('#') || href.startsWith('//')) {
         continue;
       }
-      const target = decodeURIComponent(href.split('#')[0]);
+      const target = safeDecode(href.split('#')[0]);
       if (props.isBrokenLink(target)) a.dataset.broken = 'true';
       else delete a.dataset.broken;
     }
@@ -200,6 +246,8 @@ export function Cell(props: Props) {
           props.onMenu(e.clientX, e.clientY);
         }}
       >
+        <CopyButton copied={props.copied} onCopy={props.onCopy} />
+
         <div className="nx-gutter">
           <span
             className="nx-grip"
@@ -227,24 +275,11 @@ export function Cell(props: Props) {
         </div>
 
         <div style={{ minWidth: 0 }}>
-          <div className="nx-cell-bar" data-floating={!isCode && !editing}>
-            {isCode ? (
+          {isCode && (
+            <div className="nx-cell-bar">
               <LangChip current={cell.lang} onPick={props.onLang} />
-            ) : (
-              editing && (
-                <button
-                  className="nx-btn-primary"
-                  style={{ fontSize: '11.5px', padding: '3px 14px' }}
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    commitAndPreview();
-                  }}
-                >
-                  预览
-                </button>
-              )
-            )}
-          </div>
+            </div>
+          )}
 
           {isCode ? (
             <>
@@ -279,7 +314,7 @@ export function Cell(props: Props) {
               value={mdDraft}
               rows={Math.max(3, mdDraft.split('\n').length + 1)}
               spellCheck={false}
-              placeholder="用 Markdown 书写…  Shift+Enter 预览，点开别处也会自动预览"
+              placeholder="用 Markdown 书写…  Esc 或点开别处回到预览"
               onChange={(e) => {
                 setMdDraft(e.target.value);
                 props.onSource(e.target.value);

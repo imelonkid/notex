@@ -1,4 +1,4 @@
-import { type LinkTarget, classifyLink, resolveNoteLink } from './links';
+import { type LinkTarget, classifyLink, resolveNoteLink, safeDecode } from './links';
 import { dirOf } from './store/paths';
 
 /**
@@ -67,7 +67,7 @@ export function extractLinks(markdown: string): Array<{ target: string; hash?: s
   WIKI_LINK.lastIndex = 0;
   for (let m = WIKI_LINK.exec(body); m; m = WIKI_LINK.exec(body)) push(m[1].trim());
   MD_LINK.lastIndex = 0;
-  for (let m = MD_LINK.exec(body); m; m = MD_LINK.exec(body)) push(decodeURI(m[1].trim()));
+  for (let m = MD_LINK.exec(body); m; m = MD_LINK.exec(body)) push(safeDecode(m[1].trim()));
 
   return found;
 }

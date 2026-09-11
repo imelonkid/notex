@@ -176,7 +176,6 @@ export function buildExtensions(opts: CellEditorOptions): Extension[] {
           return true;
         },
       },
-      { key: 'Mod-Enter', run: () => { opts.onRun(); return true; } },
       ...closeBracketsKeymap,
       ...completionKeymap,
       ...historyKeymap,

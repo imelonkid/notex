@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { debug } from '@core/debug';
+import { writeClipboard } from './clipboard';
 import { LANGS, isCode, type LangId, type Output, type RunMark } from '@core/model';
 import { exportIpynb, exportMarkdown, importNotebook } from '@core/files';
 import { parseDeps } from '@core/deps';
@@ -9,8 +11,9 @@ import { Cell } from './components/Cell';
 import { NoteTree } from './components/NoteTree';
 import { ContextMenu, type MenuItem, type MenuState } from './components/ContextMenu';
 import { Backlinks } from './components/Backlinks';
-import { InsertStrip } from './components/InsertStrip';
 import { Shortcuts } from './components/Shortcuts';
+import { AskModal, type AskRequest, type AskState } from './components/AskModal';
+import { CellBoundary } from './components/CellBoundary';
 import { useLinkIndex } from './useLinkIndex';
 import { SettingsModal } from './components/SettingsModal';
 import { useRuntimes } from './RuntimeContext';
@@ -50,6 +53,26 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
   /** 当前 cell，工具栏与快捷键作用于它 */
   const [activeCellId, setActiveCellId] = useState<string | null>(null);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [ask, setAsk] = useState<AskState | null>(null);
+  /** 刚复制过的 cell，用于在按钮上短暂打勾 */
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  /** 应用内的确认/输入框。取消返回 null，确认返回输入内容（纯确认时是空串） */
+  const askUser = useCallback(
+    (req: AskRequest) =>
+      new Promise<string | null>((resolve) => {
+        debug.log('ask', '弹出对话框', { title: req.title, input: !!req.input });
+        setAsk({
+          ...req,
+          resolve: (value) => {
+            debug.log('ask', value === null ? '对话框取消' : '对话框确认', { title: req.title });
+            setAsk(null);
+            resolve(value);
+          },
+        });
+      }),
+    [],
+  );
   const activeCellIdRef = useRef<string | null>(null);
   activeCellIdRef.current = activeCellId;
   const [sidebarCollapsed, setSidebarCollapsed] = useState(
@@ -81,9 +104,13 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
         const clean = target.replace(/\.md$/i, '').replace(/^\.\//, '');
         const targetDir = dirOf(clean) || fromDir;
         const name = baseOf(clean);
-        if (window.confirm(`笔记「${name}」还不存在，现在创建？`)) {
-          void book.createNotebook(name, targetDir);
-        }
+        void askUser({
+          title: '创建笔记',
+          message: `笔记「${name}」还不存在，现在创建？`,
+          confirmLabel: '创建',
+        }).then((ok) => {
+          if (ok !== null) void book.createNotebook(name, targetDir);
+        });
         return;
       }
       if (id === activeIdRef.current) {
@@ -113,6 +140,14 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
     const t = setTimeout(() => scrollToHeadingText(hash), 80);
     return () => clearTimeout(t);
   }, [book.nb]);
+
+  // 存盘成功后立刻把这篇的出链更新进索引，反链和断链状态不必等下一轮轮询
+  const touchIndex = links.touch;
+  useEffect(() => {
+    const saved = book.lastSaved;
+    if (saved) touchIndex(saved.id, saved.markdown);
+    // 只认 lastSaved：links 每次渲染都是新对象，放进依赖会无限循环
+  }, [book.lastSaved, touchIndex]);
 
   useEffect(() => {
     if (!linkNotice) return;
@@ -171,10 +206,24 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
   const runCell = useCallback(
     async (cellId: string): Promise<'ok' | 'error' | 'aborted' | 'skipped'> => {
       const current = nbRef.current?.cells.find((c) => c.id === cellId);
-      if (!current || !isCode(current)) return 'skipped';
+      if (!current || !isCode(current)) {
+        debug.warn('run', '跳过：不是代码 cell', { cellId });
+        return 'skipped';
+      }
       const lang = current.lang;
       const code = current.source;
-      if (runningIds[cellId]) return 'skipped';
+      if (runningIds[cellId]) {
+        debug.warn('run', '跳过：这个 cell 正在运行', { cellId });
+        return 'skipped';
+      }
+      const runStartedAt = performance.now();
+      // 记下发起时这篇笔记是谁：跑完可能已经切走了，结果必须回到原处
+      const noteId = nbRef.current?.id ?? null;
+      const writeOutputs = (outs: Output[]) => {
+        if (!noteId) return;
+        void book.updateNote(noteId, ops.setOutputs(cellId, outs, lang));
+      };
+      debug.log('run', '开始运行', { cellId, lang, chars: code.length, noteId });
 
       const stopRunning = () =>
         setRunningIds((r) => {
@@ -185,12 +234,13 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
       const mark = (m: RunMark) => setRunMarks((r) => ({ ...r, [cellId]: m }));
 
       setRunningIds((r) => ({ ...r, [cellId]: true }));
-      book.update(ops.setOutputs(cellId, [], lang));
+      writeOutputs([]);
 
-      const session = await registry.ensure(lang);
+      const session = await debug.op('run', `就绪 ${lang} 内核`, () => registry.ensure(lang));
       if (!session) {
+        debug.error('run', '内核不可用', { cellId, lang });
         stopRunning();
-        book.update(ops.setOutputs(cellId, [{ type: 'missing-runtime', lang }], lang));
+        writeOutputs([{ type: 'missing-runtime', lang }]);
         mark('error');
         return 'error';
       }
@@ -230,7 +280,7 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
             traceback: [],
           });
           stopRunning();
-          book.update(ops.setOutputs(cellId, outputs, lang));
+          writeOutputs(outputs);
           mark('error');
           return 'error';
         } finally {
@@ -257,8 +307,15 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
       } finally {
         registry.setBusy(lang, false);
         stopRunning();
-        book.update(ops.setOutputs(cellId, outputs, lang));
+        writeOutputs(outputs);
         mark(status);
+        debug.log('run', '运行结束', {
+          cellId,
+          lang,
+          status,
+          ms: Math.round(performance.now() - runStartedAt),
+          outputs: outputs.length,
+        });
       }
       return status;
     },
@@ -267,6 +324,7 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
 
   // 出错或被中断就停下，避免后续 cell 在错误状态上继续跑
   const runAll = useCallback(async () => {
+    debug.log('run', '全部运行', { cells: nbRef.current?.cells.length ?? 0 });
     for (const cell of nbRef.current?.cells ?? []) {
       if (!isCode(cell)) continue;
       const status = await runCell(cell.id);
@@ -275,8 +333,8 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
   }, [runCell]);
 
   const doImport = useCallback(async () => {
-    const imported = await importNotebook();
-    if (!imported) return;
+    const imported = await debug.op('io', '导入笔记', () => importNotebook());
+    if (!imported) return debug.warn('io', '导入取消或解析失败');
     await book.adopt(imported);
     setEditingId(null);
   }, [book]);
@@ -288,6 +346,7 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
     const prevCode = [...cells.slice(0, index ?? cells.length)].reverse().find(isCode);
     const lang: LangId = prevCode?.lang ?? 'python';
     const cell = type === 'md' ? newMarkdownCell() : newCodeCell(lang);
+    debug.log('cell', '插入 cell', { index, type, lang: type === 'code' ? lang : undefined });
     book.update(ops.insert(index, cell));
     setActiveCellId(cell.id);
     if (type === 'md') setEditingId(cell.id);
@@ -300,14 +359,73 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
     insertAt(i < 0 ? null : i + 1, type);
   };
 
+  /**
+   * 复制 cell 原文。取的是 source 而不是渲染结果：
+   * 文本 cell 给回 Markdown 源码，代码 cell 的缩进和换行也原样保留。
+   */
+  const copyCell = useCallback(
+    /** viaKeyboard：按钮自己会打勾，键盘路径看不到按钮，所以额外给条横幅 */
+    async (cellId: string, viaKeyboard = false) => {
+      const cell = nbRef.current?.cells.find((c) => c.id === cellId);
+      if (!cell) return debug.warn('cell', '复制失败：找不到 cell', { cellId });
+      if (!cell.source.trim()) {
+        debug.warn('cell', '复制跳过：cell 是空的', { cellId });
+        return setLinkNotice('这个 cell 是空的，没有可复制的内容');
+      }
+      const ok = await writeClipboard(cell.source);
+      debug.log('cell', ok ? '复制 cell 原文' : '复制 cell 原文失败', {
+        cellId,
+        type: cell.type,
+        chars: cell.source.length,
+      });
+      if (!ok) return setLinkNotice('复制失败：剪贴板不可用');
+      setCopiedId(cellId);
+      if (viaKeyboard) {
+        setLinkNotice(`已复制${cell.type === 'md' ? '文本' : '代码'} cell 的原文`);
+      }
+    },
+    [],
+  );
+
+  // 打勾一会儿就收回去
+  useEffect(() => {
+    if (!copiedId) return;
+    const t = setTimeout(() => setCopiedId(null), 1600);
+    return () => clearTimeout(t);
+  }, [copiedId]);
+
+  /** ⌘↩：在当前 cell 下方接着来一个同类型的，写文本继续写文本，写代码继续写代码 */
+  const insertBelowActiveSameType = () => {
+    const cells = nbRef.current?.cells ?? [];
+    const i = cells.findIndex((c) => c.id === activeCellId);
+    const ref = i >= 0 ? cells[i] : cells[cells.length - 1];
+    insertBelowActive(ref && isCode(ref) ? 'code' : 'md');
+  };
+
   /** 文本与代码互转，保留源码 */
   const convertCell = (cellId: string) => {
     const cells = nbRef.current?.cells ?? [];
     const cell = cells.find((c) => c.id === cellId);
-    if (!cell) return;
+    if (!cell) return debug.warn('cell', '转换失败：找不到 cell', { cellId });
     const prevCode = cells.filter(isCode).find((c) => c.id !== cellId);
+    debug.log('cell', '转换 cell 类型', { cellId, from: cell.type });
     book.update(ops.convert(cellId, prevCode?.lang ?? 'python'));
     if (isCode(cell)) setEditingId(cellId);
+  };
+
+  /**
+   * 焦点是否在可编辑区域里。
+   *
+   * 全局快捷键挂在 window 上，编辑器处理完同一个键也不会阻止冒泡，
+   * 于是一个键会被响应两次——⌘⌫ 在 macOS 的文本框里是"删到行首"，
+   * 却把整个 cell 删了；⌘/ 在 CodeMirror 里是注释，同时又弹出面板。
+   */
+  const inEditor = (target: EventTarget | null): boolean => {
+    if (!(target instanceof HTMLElement)) return false;
+    if (target.isContentEditable) return true;
+    if (target.closest('.cm-editor')) return true;
+    const tag = target.tagName;
+    return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
   };
 
   /**
@@ -333,23 +451,37 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
       } else if (key === 'enter' && e.altKey) {
         e.preventDefault();
         insertBelowActive('code');
+      } else if (key === 'enter') {
+        e.preventDefault();
+        insertBelowActiveSameType();
       } else if (e.altKey && (key === 'arrowdown' || key === 'arrowup')) {
         e.preventDefault();
         const cells = nbRef.current?.cells ?? [];
         const i = cells.findIndex((c) => c.id === active);
         insertAt(key === 'arrowdown' ? (i < 0 ? null : i + 1) : Math.max(i, 0), 'md');
-      } else if (key === 'backspace' && active) {
+      } else if (key === 'c' && e.shiftKey && active) {
         e.preventDefault();
+        void copyCell(active, true);
+      } else if (key === 'backspace' && active) {
+        // 在编辑器里 ⌘⌫ 是"删到行首"，不能顺手把整个 cell 删了
+        if (inEditor(e.target)) {
+          return debug.log('cell', '⌘⌫ 在编辑区内，交给编辑器', { cellId: active });
+        }
+        e.preventDefault();
+        debug.log('cell', '删除 cell（⌘⌫）', { cellId: active });
         book.update(ops.remove(active));
         setActiveCellId(null);
       } else if (key === '/') {
+        // CodeMirror 里 ⌘/ 是注释切换，别再抢着弹面板；
+        // 工具栏上那个 ⌘/ 按钮任何时候都能打开
+        if (inEditor(e.target)) return;
         e.preventDefault();
         setShortcutsOpen((v) => !v);
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [book, runAll, insertAt, insertBelowActive]);
+  }, [book, runAll, insertAt, insertBelowActive, insertBelowActiveSameType, copyCell]);
 
 
 
@@ -406,9 +538,14 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
         danger: true,
         separatorBefore: true,
         onSelect: () => {
-          if (window.confirm(`确定删除「${baseOf(id)}」？文件会从笔记库里移除。`)) {
-            void book.removeNotebook(id);
-          }
+          void askUser({
+            title: '删除笔记',
+            message: `确定删除「${baseOf(id)}」？文件会从笔记库里移除。`,
+            confirmLabel: '删除',
+            danger: true,
+          }).then((ok) => {
+            if (ok !== null) void book.removeNotebook(id);
+          });
         },
       },
     ];
@@ -447,8 +584,13 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
             book.update(ops.move(cellId, cells[i + 2]?.id ?? 'end')),
         },
         ...(code
-          ? [{ label: '运行  ⌘↩', onSelect: () => void runCell(cellId) }]
+          ? [{ label: '运行  ⇧↩', onSelect: () => void runCell(cellId) }]
           : []),
+        {
+          label: '复制原文  ⇧⌘C',
+          separatorBefore: true,
+          onSelect: () => void copyCell(cellId),
+        },
         {
           label: '删除 cell  ⌘⌫',
           danger: true,
@@ -470,8 +612,13 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
             : '新建文件夹',
         disabled: depthOf(dir) >= MAX_DIR_DEPTH,
         onSelect: () => {
-          const name = window.prompt('新文件夹名称', '新文件夹');
-          if (name?.trim()) void book.createFolder(joinId(dir, name.trim()));
+          void askUser({
+            title: '新建文件夹',
+            input: { label: '名称', value: '新文件夹' },
+            confirmLabel: '创建',
+          }).then((name) => {
+            if (name) void book.createFolder(joinId(dir, name));
+          });
         },
       },
     ];
@@ -481,10 +628,16 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
         danger: true,
         separatorBefore: true,
         onSelect: () => {
-          const msg = inside.length
-            ? `「${baseOf(dir)}」里有 ${inside.length} 篇笔记，一并删除？`
-            : `确定删除空文件夹「${baseOf(dir)}」？`;
-          if (window.confirm(msg)) void book.removeFolder(dir);
+          void askUser({
+            title: '删除文件夹',
+            message: inside.length
+              ? `「${baseOf(dir)}」里有 ${inside.length} 篇笔记，一并删除？`
+              : `确定删除空文件夹「${baseOf(dir)}」？`,
+            confirmLabel: '删除',
+            danger: true,
+          }).then((ok) => {
+            if (ok !== null) void book.removeFolder(dir);
+          });
         },
       });
     }
@@ -772,7 +925,7 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
 
               {nb.cells.map((cell, i) => (
                 <div key={cell.id}>
-                <InsertStrip onInsert={(type) => insertAt(i, type)} />
+                <CellBoundary index={i}>
                 <Cell
                   key={cell.id}
                   cell={cell}
@@ -796,6 +949,8 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
                     void registry.get(lang).session?.interrupt();
                   }}
                   onRemove={() => book.update(ops.remove(cell.id))}
+                  copied={copiedId === cell.id}
+                  onCopy={() => void copyCell(cell.id)}
                   onEdit={() => setEditingId(cell.id)}
                   onDoneEdit={() => setEditingId(null)}
                   onDragStart={() => setDragId(cell.id)}
@@ -819,6 +974,7 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
                   }}
                   onOpenSettings={() => setSettingsOpen(true)}
                 />
+                </CellBoundary>
                 </div>
               ))}
 
@@ -835,7 +991,7 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
                 }}
               >
                 <div className="nx-dropline" data-active={!!dragId && dropId === 'end'} />
-                {nb.cells.length === 0 ? (
+                {nb.cells.length === 0 && (
                   <div className="nx-empty-note">
                     <div className="nx-empty-title">这篇笔记还是空的</div>
                     <div className="nx-seg">
@@ -847,8 +1003,6 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
                       </button>
                     </div>
                   </div>
-                ) : (
-                  <InsertStrip onInsert={(type) => insertAt(null, type)} />
                 )}
               </div>
 
@@ -866,6 +1020,7 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
       </main>
 
       {shortcutsOpen && <Shortcuts onClose={() => setShortcutsOpen(false)} />}
+      {ask && <AskModal state={ask} />}
       {menu && <ContextMenu state={menu} onClose={() => setMenu(null)} />}
 
       {settingsOpen && (

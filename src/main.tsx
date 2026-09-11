@@ -8,6 +8,8 @@ import { RuntimeProvider } from './ui/RuntimeContext';
 import { detectHost } from './host/DevServerHost';
 import type { HostBridge } from './host/HostBridge';
 import { openStore, type StoreSetup } from './core/store/index';
+import { RootBoundary } from './ui/components/CellBoundary';
+import { attachDebugSink, debug, installGlobalErrorLog } from './core/debug';
 
 /**
  * 加载主题包。优先问宿主，它会合并内置 themes/ 与用户 ~/.notex/themes/；
@@ -66,14 +68,19 @@ function Boot() {
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
-    void detectHost().then(setHost);
+    void detectHost().then((h) => {
+      setHost(h);
+      void attachDebugSink(h);
+    });
   }, []);
 
   useEffect(() => {
     if (!host) return;
     let cancelled = false;
     setSetup(null);
-    void openStore(host).then((s) => !cancelled && setSetup(s));
+    void debug
+      .op('store', '打开笔记库', () => openStore(host))
+      .then((s) => !cancelled && setSetup(s));
     return () => {
       cancelled = true;
     };
@@ -126,6 +133,7 @@ function migrateLegacyStorage() {
 }
 
 migrateLegacyStorage();
+installGlobalErrorLog();
 
 const container = document.getElementById('root')!;
 
@@ -141,7 +149,9 @@ const root = (window.__xnbRoot ??= createRoot(container));
 root.render(
   <StrictMode>
     <ThemeProvider>
-      <Boot />
+      <RootBoundary>
+        <Boot />
+      </RootBoundary>
     </ThemeProvider>
   </StrictMode>,
 );

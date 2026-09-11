@@ -1,6 +1,7 @@
 import type { LangId, Output } from '@core/model';
 import { LANGS } from '@core/model';
 import { InstallGuideCard } from './InstallGuideCard';
+import { sanitizeOutput } from '../sanitize';
 
 /** 富输出渲染：按 MIME 优先级挑一种展示 */
 function RichData({ data }: { data: Record<string, string> }) {
@@ -8,10 +9,10 @@ function RichData({ data }: { data: Record<string, string> }) {
     return <img className="nx-out-html" src={`data:image/png;base64,${data['image/png']}`} alt="输出图像" />;
   }
   if (data['image/svg+xml']) {
-    return <div className="nx-out-html" dangerouslySetInnerHTML={{ __html: data['image/svg+xml'] }} />;
+    return <div className="nx-out-html" dangerouslySetInnerHTML={{ __html: sanitizeOutput(data['image/svg+xml']) }} />;
   }
   if (data['text/html']) {
-    return <div className="nx-out-html" dangerouslySetInnerHTML={{ __html: data['text/html'] }} />;
+    return <div className="nx-out-html" dangerouslySetInnerHTML={{ __html: sanitizeOutput(data['text/html']) }} />;
   }
   return <div className="nx-out-line nx-out-result">→ {data['text/plain'] ?? ''}</div>;
 }

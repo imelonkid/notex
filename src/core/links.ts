@@ -30,6 +30,18 @@ const DENIED_PROTOCOLS = new Set([
   'about:',
 ]);
 
+/**
+ * 容错解码。链接里出现未编码的 % 时 decodeURIComponent 会抛 URIError，
+ * 而链接文本来自笔记正文，什么都可能写——解不开就按原样用，绝不能抛。
+ */
+export function safeDecode(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
 function protocolOf(href: string): string | null {
   const m = /^([a-z][a-z0-9+.-]*:)/i.exec(href.trim());
   return m ? m[1].toLowerCase() : null;
@@ -41,7 +53,7 @@ export function classifyLink(rawHref: string): LinkKind {
 
   // 纯锚点
   if (href.startsWith('#')) {
-    return { kind: 'anchor', target: decodeURIComponent(href.slice(1)) };
+    return { kind: 'anchor', target: safeDecode(href.slice(1)) };
   }
 
   const protocol = protocolOf(href);
@@ -68,11 +80,11 @@ export function classifyLink(rawHref: string): LinkKind {
   if (hashAt >= 0) {
     return {
       kind: 'internal',
-      target: decodeURIComponent(href.slice(0, hashAt)),
-      hash: decodeURIComponent(href.slice(hashAt + 1)),
+      target: safeDecode(href.slice(0, hashAt)),
+      hash: safeDecode(href.slice(hashAt + 1)),
     };
   }
-  return { kind: 'internal', target: decodeURIComponent(href) };
+  return { kind: 'internal', target: safeDecode(href) };
 }
 
 /** 把标题文本转成可作为锚点的 id，与 Markdown 渲染时的规则保持一致 */
