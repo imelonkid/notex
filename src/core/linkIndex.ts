@@ -80,6 +80,24 @@ interface Entry {
   stamp: string;
   /** 列表页用的摘要与代码语言。反正已经读了全文，顺带算出来 */
   summary: NoteSummary;
+  /** 去掉 frontmatter 的正文，全库搜索用。几千篇笔记也就几十 MB，放内存里没问题 */
+  text: string;
+  /** 正文的小写版本，查询时不必每次都转 */
+  lower: string;
+}
+
+export interface SearchHit {
+  id: string;
+  /** 命中的是标题还是正文 */
+  inTitle: boolean;
+  /** 正文里第一处命中附近的一小段，标题命中时可能为空 */
+  snippet: string;
+}
+
+const SNIPPET_RADIUS = 40;
+
+function stripFrontmatter(markdown: string): string {
+  return markdown.replace(/^﻿?---\r?\n[\s\S]*?\r?\n---\r?\n?/, '');
 }
 
 export class LinkIndex {
@@ -99,7 +117,34 @@ export class LinkIndex {
       hash: l.hash,
       resolved: resolveNoteLink(l.target, this.notes, fromDir),
     }));
-    this.entries.set(id, { links, stamp, summary: summarizeMarkdown(markdown) });
+    const text = stripFrontmatter(markdown);
+    this.entries.set(id, {
+      links,
+      stamp,
+      summary: summarizeMarkdown(markdown),
+      text,
+      lower: text.toLowerCase(),
+    });
+  }
+
+  /**
+   * 全库搜索：标题与正文都查，多个词要全部命中（不分先后）。
+   * 标题命中排前面，其余按 id 排，结果稳定可预期。不做模糊匹配：
+   * 笔记库里的东西是自己写的，记得大概怎么写的，子串足够。
+   */
+  search(query: string, limit = 30): SearchHit[] {
+    const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    if (!tokens.length) return [];
+    const hits: SearchHit[] = [];
+    for (const [id, entry] of this.entries) {
+      const title = id.slice(id.lastIndexOf('/') + 1).toLowerCase();
+      const inTitle = tokens.every((t) => title.includes(t));
+      const inText = tokens.every((t) => entry.lower.includes(t));
+      if (!inTitle && !inText) continue;
+      hits.push({ id, inTitle, snippet: inText ? snippetOf(entry, tokens[0]) : '' });
+    }
+    hits.sort((a, b) => Number(b.inTitle) - Number(a.inTitle) || a.id.localeCompare(b.id));
+    return hits.slice(0, limit);
   }
 
   remove(id: string): void {
@@ -175,4 +220,14 @@ export class LinkIndex {
   get size(): number {
     return this.entries.size;
   }
+}
+
+/** 第一处命中前后各取一段，换行压成空格，两头没到边界就加省略号 */
+function snippetOf(entry: Entry, token: string): string {
+  const at = entry.lower.indexOf(token);
+  if (at < 0) return '';
+  const start = Math.max(0, at - SNIPPET_RADIUS);
+  const end = Math.min(entry.text.length, at + token.length + SNIPPET_RADIUS);
+  const piece = entry.text.slice(start, end).replace(/\s+/g, ' ').trim();
+  return `${start > 0 ? '…' : ''}${piece}${end < entry.text.length ? '…' : ''}`;
 }

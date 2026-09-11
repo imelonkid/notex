@@ -153,6 +153,12 @@ export class VaultStore implements NotebookStore {
     return await this.host.readText(this.mdPath(id));
   }
 
+  /** 原样写回，并记下新的修改时间，免得被当成外部改动 */
+  async writeRaw(id: string, markdown: string): Promise<void> {
+    await this.host.writeText(this.mdPath(id), markdown);
+    this.seen.set(id, (await this.host.statFile(this.mdPath(id))) ?? '');
+  }
+
   /** 文件是否在我们读入之后被别处改过 */
   async changedOutside(id: string): Promise<boolean> {
     const known = this.seen.get(id);
@@ -205,10 +211,16 @@ export class VaultStore implements NotebookStore {
     return nb;
   }
 
+  /** 能进废纸篓就进废纸篓；宿主做不到才真删 */
+  private async discard(path: string): Promise<void> {
+    if (this.host.trash) await this.host.trash(path);
+    else await this.host.removeFile(path);
+  }
+
   async remove(id: string): Promise<void> {
     // 正文删不掉是真问题，必须抛出去；旁车文件本来就可能不存在
-    await this.host.removeFile(this.mdPath(id));
-    await this.host.removeFile(this.outputsPath(id)).catch(() => undefined);
+    await this.discard(this.mdPath(id));
+    await this.discard(this.outputsPath(id)).catch(() => undefined);
     this.seen.delete(id);
   }
 
@@ -246,10 +258,11 @@ export class VaultStore implements NotebookStore {
     if (nb) await this.save(nb);
   }
 
-  /** 递归删除目录及其中的笔记 */
+  /** 整个目录连同其中的一切移到废纸篓；宿主做不到才递归删除 */
   async removeFolder(dir: string): Promise<void> {
     if (!dir || !safeSegments(dir)) throw new Error(`非法的目录：${dir}`);
-    await this.host.removeDir(this.dirPath(dir));
+    if (this.host.trash) await this.host.trash(this.dirPath(dir));
+    else await this.host.removeDir(this.dirPath(dir));
     for (const id of [...this.seen.keys()]) {
       if (id === dir || id.startsWith(dir + '/')) this.seen.delete(id);
     }

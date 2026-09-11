@@ -47,6 +47,8 @@ export interface NotebookStore {
   /** 以下只有落盘的实现支持，localStorage 后端没有目录概念 */
   listAll?(): Promise<VaultListing>;
   readRaw?(id: string): Promise<string>;
+  /** 直接写回原始 Markdown，用于批量改写链接这类不经过模型的编辑 */
+  writeRaw?(id: string, markdown: string): Promise<void>;
   move?(id: string, targetDir: string): Promise<string>;
   createFolder?(dir: string): Promise<void>;
   removeFolder?(dir: string): Promise<void>;

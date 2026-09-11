@@ -10,6 +10,7 @@ import io
 import json
 import os
 import platform
+import signal
 import sys
 import threading
 import traceback
@@ -138,10 +139,34 @@ def repr_bundle(value):
         except Exception:
             pass
     try:
-        data["text/plain"] = repr(value)
+        data["text/plain"] = clip(repr(value))
     except Exception as exc:
         data["text/plain"] = "<repr 失败: %s>" % exc
+    if "text/html" in data:
+        data["text/html"] = clip(data["text/html"], MAX_HTML)
     return data
+
+
+# 结果文本的上限。几十 MB 的一行塞进界面会把页面卡死，看不到也没意义
+MAX_TEXT = 20_000
+MAX_HTML = 1_000_000
+
+
+def clip(text, limit=MAX_TEXT):
+    if len(text) <= limit:
+        return text
+    return text[:limit] + "\n…（共 %d 字符，已截断）" % len(text)
+
+
+def interrupts(enabled):
+    """
+    只在执行用户代码的区间接收 SIGINT。
+
+    宿主发信号的时机由它自己定，落在 execute 之外——done 还没发、
+    补全正跑到一半——KeyboardInterrupt 就会穿到 main 外面把内核整个带走。
+    区间外直接忽略（SIG_IGN 是丢弃，不是排队，不会在下一个 cell 开头误触发）。
+    """
+    signal.signal(signal.SIGINT, signal.default_int_handler if enabled else signal.SIG_IGN)
 
 
 def format_traceback(exc_type, exc, tb):
@@ -178,6 +203,7 @@ def execute(request_id, code):
     old_out, old_err = sys.stdout, sys.stderr
     sys.stdout, sys.stderr = OUT_SINK, ERR_SINK
     try:
+        interrupts(True)
         if body:
             exec(compile(ast.Module(body=body, type_ignores=[]), "<cell>", "exec"), NS)
 
@@ -232,6 +258,7 @@ def execute(request_id, code):
         )
         status = "error"
     finally:
+        interrupts(False)
         OUT_SINK.flush()
         ERR_SINK.flush()
         sys.stdout, sys.stderr = old_out, old_err
@@ -342,6 +369,7 @@ def main():
         inbox.put(None)
 
     threading.Thread(target=reader, daemon=True).start()
+    interrupts(False)
 
     while True:
         try:
@@ -356,7 +384,12 @@ def main():
 
         if op == "execute":
             t0 = time.time()
-            status = execute(request_id, req.get("code", ""))
+            status = "error"
+            try:
+                status = execute(request_id, req.get("code", ""))
+            except KeyboardInterrupt:
+                # 极小概率：中断落在 execute 自己的收尾里。cell 算被中断，内核照常活着
+                status = "aborted"
             emit(
                 {
                     "id": request_id,

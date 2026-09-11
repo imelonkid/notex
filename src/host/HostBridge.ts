@@ -75,6 +75,11 @@ export interface HostBridge {
   removeFile(path: string): Promise<void>;
   /** 递归删除目录 */
   removeDir(path: string): Promise<void>;
+  /**
+   * 移到系统废纸篓，文件与目录都可以；不存在时静默返回。
+   * 能做到的宿主才实现，存储层没有它时才真删。
+   */
+  trash?(path: string): Promise<void>;
   renameFile(from: string, to: string): Promise<void>;
   /** 路径拼接由宿主做，避免前端猜分隔符 */
   joinPath(...parts: string[]): string;

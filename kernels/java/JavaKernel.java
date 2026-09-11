@@ -23,6 +23,8 @@ public class JavaKernel {
     volatile boolean stopRequested = false;
     /** 调用注入的渲染器时置位，避免对渲染结果本身再次渲染 */
     volatile boolean rendering = false;
+    /** 远端 JVM 已退出。JShell 通过 onShutdown 通知，而 eval 未必立刻抛错 */
+    volatile boolean remoteDead = false;
     final ExecutorService worker = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "notex-exec");
         t.setDaemon(true);
@@ -33,26 +35,38 @@ public class JavaKernel {
         new JavaKernel().run();
     }
 
-    void run() throws Exception {
-        shell = JShell.builder()
-                .out(new PrintStream(new StreamSink("stdout"), true, StandardCharsets.UTF_8))
-                .err(new PrintStream(new StreamSink("stderr"), true, StandardCharsets.UTF_8))
-                .in(new ByteArrayInputStream(new byte[0]))
-                // JShell 会另起一个 JVM 执行用户代码（这是中断和隔离的前提）。
-                // 在 macOS 上它默认会注册成前台应用，弹出 Dock 图标并抢走焦点，
-                // UIElement 让它以后台身份运行；其余参数只为压低启动开销。
-                .remoteVMOptions(
-                        "-Dapple.awt.UIElement=true",
-                        "-XX:TieredStopAtLevel=1",
-                        "-XX:+UseSerialGC",
-                        "-Xshare:auto")
-                .build();
-        analysis = shell.sourceCodeAnalysis();
+    /**
+     * 把 SIGINT 接成"中断当前 cell"。
+     * 宿主在协议中断迟迟不收敛时会升级发信号；JVM 对 SIGINT 的默认行为是退出，
+     * 那样整个 JShell 状态都没了。sun.misc.Signal 在 jdk.unsupported 里，
+     * 走反射既避开源码启动器的编译警告，也让没有它的平台静默降级。
+     */
+    void installInterruptSignal() {
         try {
-            shell.eval(RENDERER_SOURCE);
-        } catch (Exception ignored) {
-            // 渲染器注入失败只影响富输出，纯文本结果照常工作
+            Class<?> signal = Class.forName("sun.misc.Signal");
+            Class<?> handler = Class.forName("sun.misc.SignalHandler");
+            Object proxy = java.lang.reflect.Proxy.newProxyInstance(
+                    handler.getClassLoader(),
+                    new Class<?>[] { handler },
+                    (p, m, a) -> {
+                        if (m.getName().equals("handle")) requestStop();
+                        return null;
+                    });
+            Object sigint = signal.getConstructor(String.class).newInstance("INT");
+            signal.getMethod("handle", signal, handler).invoke(null, sigint, proxy);
+        } catch (Throwable ignored) {
+            // 装不上就保持 JVM 默认行为，只影响信号升级这条兜底路径
         }
+    }
+
+    void requestStop() {
+        stopRequested = true;
+        try { shell.stop(); } catch (Exception ignored) {}
+    }
+
+    void run() throws Exception {
+        installInterruptSignal();
+        buildShell();
 
         Map<String, Object> ready = new LinkedHashMap<>();
         ready.put("id", "boot");
@@ -73,15 +87,50 @@ public class JavaKernel {
                 case "complete" -> complete(id, str(req.get("code")), intOf(req.get("cursor")));
                 case "inspect" -> inspect(id, str(req.get("code")), intOf(req.get("cursor")));
                 case "classpath" -> addClasspath(id, req.get("paths"));
-                case "interrupt" -> {
-                    stopRequested = true;
-                    try { shell.stop(); } catch (Exception ignored) {}
-                }
+                case "interrupt" -> requestStop();
                 case "shutdown" -> { shutdown(); return; }
                 default -> done(id, "error", 0);
             }
         }
         shutdown();
+    }
+
+    void buildShell() {
+        shell = JShell.builder()
+                .out(new PrintStream(new StreamSink("stdout"), true, StandardCharsets.UTF_8))
+                .err(new PrintStream(new StreamSink("stderr"), true, StandardCharsets.UTF_8))
+                .in(new ByteArrayInputStream(new byte[0]))
+                // JShell 会另起一个 JVM 执行用户代码（这是中断和隔离的前提）。
+                // 在 macOS 上它默认会注册成前台应用，弹出 Dock 图标并抢走焦点，
+                // UIElement 让它以后台身份运行；其余参数只为压低启动开销。
+                .remoteVMOptions(
+                        "-Dapple.awt.UIElement=true",
+                        "-XX:TieredStopAtLevel=1",
+                        "-XX:+UseSerialGC",
+                        "-Xshare:auto")
+                .build();
+        remoteDead = false;
+        shell.onShutdown(js -> remoteDead = true);
+        analysis = shell.sourceCodeAnalysis();
+        try {
+            shell.eval(RENDERER_SOURCE);
+        } catch (Exception ignored) {
+            // 渲染器注入失败只影响富输出，纯文本结果照常工作
+        }
+    }
+
+    static final String REMOTE_DIED =
+            "执行用户代码的 JVM 已退出（System.exit、内存耗尽或崩溃）。内核已重建，之前的变量和依赖已丢失。";
+
+    /**
+     * 远端 JVM 死了（用户代码 System.exit、内存耗尽、崩溃）之后，
+     * 这个 JShell 实例上的每次 eval 都会抛 IllegalStateException，
+     * 内核进程还活着却什么都跑不了。重建一个，让用户不必手动重启。
+     */
+    void rebuildShell() {
+        try { shell.close(); } catch (Exception ignored) {}
+        classpath.clear();
+        buildShell();
     }
 
     /** 把 jar 加入 JShell 类路径。已加过的跳过，重复 add 会让 JShell 报警。 */
@@ -282,7 +331,15 @@ public class JavaKernel {
             try {
                 events = shell.eval(snippet);
             } catch (IllegalStateException e) {
-                error(id, "KernelError", "内核已关闭", List.of());
+                rebuildShell();
+                error(id, "KernelError", REMOTE_DIED, List.of());
+                return "error";
+            }
+            // 用户代码调了 System.exit 之类：这次 eval 可能正常返回，但远端已经没了。
+            // 立刻重建并报错，别让下一个 cell 替它背锅
+            if (remoteDead) {
+                rebuildShell();
+                error(id, "KernelError", REMOTE_DIED, List.of());
                 return "error";
             }
 
@@ -338,7 +395,7 @@ public class JavaKernel {
             Map<String, Object> data = new LinkedHashMap<>();
             String[] rich = richOutput(lastName);
             if (rich != null) data.put(rich[0], rich[1]);
-            data.put("text/plain", lastValue);
+            data.put("text/plain", clip(lastValue));
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("id", id);
             m.put("type", "result");
@@ -346,6 +403,14 @@ public class JavaKernel {
             emit(m);
         }
         return "ok";
+    }
+
+    /** 结果文本的上限。JShell 不截断远端字符串，几十 MB 的一行会把界面卡死 */
+    static final int MAX_TEXT = 20_000;
+
+    static String clip(String text) {
+        if (text.length() <= MAX_TEXT) return text;
+        return text.substring(0, MAX_TEXT) + "\n…（共 " + text.length() + " 字符，已截断）";
     }
 
     static String simpleName(String fqcn) {

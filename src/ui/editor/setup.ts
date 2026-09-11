@@ -194,6 +194,10 @@ export function buildExtensions(opts: CellEditorOptions): Extension[] {
           return true;
         },
       },
+      // defaultKeymap 把 Mod-Enter 绑给 insertBlankLine，而应用层的 ⌘↩ 是「在下方新建 cell」。
+      // 不拦下来的话一个键做两件事：编辑器多一空行，笔记多一个 cell。
+      // 这里吞掉编辑器的那一半，事件照常冒泡到 window 让应用层处理。
+      { key: 'Mod-Enter', run: () => true },
       ...closeBracketsKeymap,
       ...completionKeymap,
       ...historyKeymap,

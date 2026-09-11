@@ -9,7 +9,8 @@ use std::io::{BufRead, BufReader, Read, Write};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -41,16 +42,73 @@ struct ExitInfo {
     code: Option<i32>,
 }
 
-/// 运行中的内核子进程
+/// 运行中的内核子进程。
+///
+/// stdin 与 child 分开加锁：往 stdin 写可能因为内核正忙不读而阻塞，
+/// 那时恰恰需要发信号中断它，两者共用一把锁就会互相卡死。
 struct Kernel {
-    child: Child,
-    stdin: Option<std::process::ChildStdin>,
+    pid: u32,
+    child: Mutex<Child>,
+    stdin: Mutex<Option<std::process::ChildStdin>>,
 }
 
 #[derive(Default)]
-pub struct Kernels(Mutex<HashMap<u64, Kernel>>);
+pub struct Kernels(Mutex<HashMap<u64, Arc<Kernel>>>);
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
+
+fn kernel_of(kernels: &Kernels, id: u64) -> Result<Arc<Kernel>, String> {
+    kernels
+        .0
+        .lock()
+        .unwrap()
+        .get(&id)
+        .cloned()
+        .ok_or_else(|| "内核已退出".into())
+}
+
+fn send_signal(kernel: &Kernel, signal: &str) -> Result<(), String> {
+    #[cfg(unix)]
+    {
+        // SIGINT 用于中断执行，内核进程本身要活着，因此不能直接 kill
+        let sig = match signal {
+            "SIGINT" => 2,
+            "SIGTERM" => 15,
+            _ => 9,
+        };
+        unsafe {
+            libc::kill(kernel.pid as i32, sig);
+        }
+        Ok(())
+    }
+
+    #[cfg(not(unix))]
+    {
+        let _ = signal;
+        kernel.child.lock().unwrap().kill().map_err(|e| e.to_string())
+    }
+}
+
+/// 把还活着的内核全部结束掉。应用退出与页面重载时用：
+/// 忙碌中的内核不读 stdin，靠 EOF 是等不到它自己退出的。
+fn kill_all_kernels(kernels: &Kernels) {
+    let all: Vec<Arc<Kernel>> = kernels.0.lock().unwrap().drain().map(|(_, k)| k).collect();
+    if all.is_empty() {
+        return;
+    }
+    for k in &all {
+        let _ = send_signal(k, "SIGTERM");
+    }
+    std::thread::sleep(Duration::from_millis(300));
+    for k in &all {
+        let mut child = k.child.lock().unwrap();
+        if matches!(child.try_wait(), Ok(None)) {
+            let _ = child.kill();
+        }
+        // 回收，避免留下僵尸
+        let _ = child.wait();
+    }
+}
 
 fn to_iso(time: std::time::SystemTime) -> Option<String> {
     let dur = time.duration_since(std::time::UNIX_EPOCH).ok()?;
@@ -156,6 +214,19 @@ fn remove_dir(path: String) -> Result<(), String> {
     }
 }
 
+/// 移到系统废纸篓。不存在的路径静默返回，与 remove_file 的宽松语义一致
+#[tauri::command]
+async fn trash_path(path: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        if !PathBuf::from(&path).exists() {
+            return Ok(());
+        }
+        trash::delete(&path).map_err(|e| format!("{path}: {e}"))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 #[tauri::command]
 fn rename_file(from: String, to: String) -> Result<(), String> {
     if let Some(parent) = PathBuf::from(&to).parent() {
@@ -169,17 +240,34 @@ fn env_var(name: String) -> Option<String> {
     std::env::var(name).ok()
 }
 
+/// 跑外部进程的命令一律 async：同步命令在主线程执行，
+/// `mvn` 解析依赖那几十秒整个窗口都会冻住。
 #[tauri::command]
-fn which(bin: String) -> Option<String> {
-    let finder = if cfg!(windows) { "where" } else { "which" };
-    let out = Command::new(finder).arg(&bin).output().ok()?;
-    let text = String::from_utf8_lossy(&out.stdout);
-    text.lines().next().map(|l| l.trim().to_string()).filter(|l| !l.is_empty())
+async fn which(bin: String) -> Option<String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let finder = if cfg!(windows) { "where" } else { "which" };
+        let out = Command::new(finder).arg(&bin).output().ok()?;
+        let text = String::from_utf8_lossy(&out.stdout);
+        text.lines().next().map(|l| l.trim().to_string()).filter(|l| !l.is_empty())
+    })
+    .await
+    .ok()
+    .flatten()
 }
 
 #[tauri::command]
-fn exec(cmd: String, args: Vec<String>) -> ExecResult {
-    match Command::new(&cmd).args(&args).output() {
+async fn exec(cmd: String, args: Vec<String>) -> ExecResult {
+    tauri::async_runtime::spawn_blocking(move || run_exec(&cmd, &args))
+        .await
+        .unwrap_or_else(|e| ExecResult {
+            code: 1,
+            stdout: String::new(),
+            stderr: e.to_string(),
+        })
+}
+
+fn run_exec(cmd: &str, args: &[String]) -> ExecResult {
+    match Command::new(cmd).args(args).output() {
         Ok(out) => ExecResult {
             code: out.status.code().unwrap_or(0),
             stdout: String::from_utf8_lossy(&out.stdout).to_string(),
@@ -234,18 +322,21 @@ fn kernel_spawn(
     let mut child = command.spawn().map_err(|e| format!("{cmd}: {e}"))?;
     let id = NEXT_ID.fetch_add(1, Ordering::SeqCst);
 
-    // stdout 按行读；协议消息本来就是一行一条
+    // stdout 按行读；协议消息本来就是一行一条。
+    // 按字节读再宽松解码：用户代码起的子进程会直写 fd 1，
+    // 一个非 UTF-8 字节不能让这个内核的输出从此失联
     if let Some(stdout) = child.stdout.take() {
         let app = app.clone();
         std::thread::spawn(move || {
             let mut reader = BufReader::new(stdout);
-            let mut buf = String::new();
+            let mut buf = Vec::new();
             loop {
                 buf.clear();
-                match reader.read_line(&mut buf) {
+                match reader.read_until(b'\n', &mut buf) {
                     Ok(0) | Err(_) => break,
                     Ok(_) => {
-                        let _ = app.emit("kernel://stdout", StreamChunk { id, text: buf.clone() });
+                        let text = String::from_utf8_lossy(&buf).to_string();
+                        let _ = app.emit("kernel://stdout", StreamChunk { id, text });
                     }
                 }
             }
@@ -271,28 +362,25 @@ fn kernel_spawn(
     }
 
     let stdin = child.stdin.take();
-    kernels.0.lock().unwrap().insert(id, Kernel { child, stdin });
+    let kernel = Arc::new(Kernel {
+        pid: child.id(),
+        child: Mutex::new(child),
+        stdin: Mutex::new(stdin),
+    });
+    kernels.0.lock().unwrap().insert(id, Arc::clone(&kernel));
 
     // 退出监听：单独线程等，避免阻塞命令返回
     {
         let app = app.clone();
-        let state = app.state::<Kernels>();
-        let _ = state;
         std::thread::spawn(move || loop {
-            std::thread::sleep(std::time::Duration::from_millis(200));
-            let kernels = app.state::<Kernels>();
-            let mut map = kernels.0.lock().unwrap();
-            let done = match map.get_mut(&id) {
-                Some(k) => match k.child.try_wait() {
-                    Ok(Some(status)) => Some(status.code()),
-                    Ok(None) => None,
-                    Err(_) => Some(None),
-                },
-                None => break,
+            std::thread::sleep(Duration::from_millis(200));
+            let done = match kernel.child.lock().unwrap().try_wait() {
+                Ok(Some(status)) => Some(status.code()),
+                Ok(None) => None,
+                Err(_) => Some(None),
             };
             if let Some(code) = done {
-                map.remove(&id);
-                drop(map);
+                app.state::<Kernels>().0.lock().unwrap().remove(&id);
                 let _ = app.emit("kernel://exit", ExitInfo { id, code });
                 break;
             }
@@ -303,39 +391,28 @@ fn kernel_spawn(
 }
 
 #[tauri::command]
-fn kernel_write(kernels: State<Kernels>, id: u64, data: String) -> Result<(), String> {
-    let mut map = kernels.0.lock().unwrap();
-    let kernel = map.get_mut(&id).ok_or("内核已退出")?;
-    let stdin = kernel.stdin.as_mut().ok_or("内核 stdin 不可用")?;
-    stdin.write_all(data.as_bytes()).map_err(|e| e.to_string())?;
-    stdin.flush().map_err(|e| e.to_string())
+async fn kernel_write(kernels: State<'_, Kernels>, id: u64, data: String) -> Result<(), String> {
+    let kernel = kernel_of(&kernels, id)?;
+    // 内核不读 stdin 时 write 会阻塞（管道满），不能占着主线程
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut guard = kernel.stdin.lock().unwrap();
+        let stdin = guard.as_mut().ok_or("内核 stdin 不可用")?;
+        stdin.write_all(data.as_bytes()).map_err(|e| e.to_string())?;
+        stdin.flush().map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
 fn kernel_signal(kernels: State<Kernels>, id: u64, signal: String) -> Result<(), String> {
-    let mut map = kernels.0.lock().unwrap();
-    let kernel = map.get_mut(&id).ok_or("内核已退出")?;
+    let kernel = kernel_of(&kernels, id)?;
+    send_signal(&kernel, &signal)
+}
 
-    #[cfg(unix)]
-    {
-        // SIGINT 用于中断执行，内核进程本身要活着，因此不能直接 kill
-        let sig = match signal.as_str() {
-            "SIGINT" => 2,
-            "SIGTERM" => 15,
-            _ => 9,
-        };
-        let pid = kernel.child.id() as i32;
-        unsafe {
-            libc::kill(pid, sig);
-        }
-        return Ok(());
-    }
-
-    #[cfg(not(unix))]
-    {
-        let _ = signal;
-        kernel.child.kill().map_err(|e| e.to_string())
-    }
+#[tauri::command]
+fn kernel_kill_all(kernels: State<Kernels>) {
+    kill_all_kernels(&kernels);
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -355,6 +432,7 @@ pub fn run() {
             ensure_dir,
             remove_file,
             remove_dir,
+            trash_path,
             rename_file,
             env_var,
             which,
@@ -363,9 +441,17 @@ pub fn run() {
             kernel_spawn,
             kernel_write,
             kernel_signal,
+            kernel_kill_all,
         ])
-        .run(tauri::generate_context!())
-        .expect("NoteX 启动失败");
+        .build(tauri::generate_context!())
+        .expect("NoteX 启动失败")
+        .run(|app, event| {
+            // 前端 beforeunload 里的 shutdown 是异步 invoke，窗口关闭时不保证送达；
+            // 这里是最后一道，保证退出后不留下还在跑死循环的内核
+            if let tauri::RunEvent::Exit = event {
+                kill_all_kernels(&app.state::<Kernels>());
+            }
+        });
 }
 
 #[cfg(test)]
@@ -436,11 +522,11 @@ mod tests {
 
     #[test]
     fn exec_reports_output_and_failure() {
-        let ok = exec("echo".into(), vec!["hi".into()]);
+        let ok = run_exec("echo", &["hi".to_string()]);
         assert_eq!(ok.code, 0);
         assert!(ok.stdout.contains("hi"));
 
-        let missing = exec("notex-no-such-binary".into(), vec![]);
+        let missing = run_exec("notex-no-such-binary", &[]);
         assert_eq!(missing.code, 1);
         assert!(!missing.stderr.is_empty());
     }

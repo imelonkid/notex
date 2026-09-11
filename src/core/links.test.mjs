@@ -2,7 +2,8 @@
 /** 链接分类测试。用法：pnpm test:links */
 import assert from 'node:assert/strict';
 
-const { classifyLink, headingSlug, resolveNoteLink, expandWikiLinks } = await import('./links.ts');
+const { classifyLink, headingSlug, resolveNoteLink, expandWikiLinks, rewriteNoteLinks, nextLinkTarget } =
+  await import('./links.ts');
 
 let passed = 0;
 function test(name, fn) {
@@ -183,6 +184,48 @@ test('普通方括号不受影响', () => {
 
 test('跨行不误匹配', () => {
   assert.equal(expandWikiLinks('[[前半\n后半]]'), '[[前半\n后半]]');
+});
+
+console.log('\n改名后改写链接');
+
+const toB = (t) => (t === '甲' || t === '甲.md' || t === '工作/甲' ? t.replace('甲', '乙') : null);
+
+test('wiki 链接：目标换掉，小节与别名保留', () => {
+  const r = rewriteNoteLinks('看 [[甲]] 和 [[甲#部署|那篇]]，还有 [[丙]]', toB);
+  assert.equal(r.text, '看 [[乙]] 和 [[乙#部署|那篇]]，还有 [[丙]]');
+  assert.equal(r.count, 2);
+});
+
+test('标准链接：路径换掉，.md 与标题保留', () => {
+  const r = rewriteNoteLinks('[去](甲.md) [去](工作/甲#小节 "t") [外](https://x.com/甲)', toB);
+  assert.equal(r.text, '[去](乙.md) [去](工作/乙#小节 "t") [外](https://x.com/甲)');
+  assert.equal(r.count, 2);
+});
+
+test('围栏代码块与行内代码里的不动', () => {
+  const src = '```\n[[甲]]\n```\n用 `[[甲]]` 这样写；真链接 [[甲]]';
+  const r = rewriteNoteLinks(src, toB);
+  assert.equal(r.text, '```\n[[甲]]\n```\n用 `[[甲]]` 这样写；真链接 [[乙]]');
+  assert.equal(r.count, 1);
+});
+
+test('没有命中时原文一字不改', () => {
+  const src = '什么都 [[没有]] 的 [文字](丙.md)\n第二行';
+  const r = rewriteNoteLinks(src, toB);
+  assert.equal(r.text, src);
+  assert.equal(r.count, 0);
+});
+
+test('新写法尽量沿用旧习惯：按名字的仍按名字，重名才写路径，.md 保留', () => {
+  const notes = [
+    { id: '工作/乙', title: '乙', dir: '工作' },
+    { id: '丙', title: '丙', dir: '' },
+  ];
+  assert.equal(nextLinkTarget('甲', '工作/乙', notes), '乙');
+  assert.equal(nextLinkTarget('甲.md', '工作/乙', notes), '乙.md');
+  assert.equal(nextLinkTarget('旧目录/甲', '工作/乙', notes), '工作/乙');
+  const dup = [...notes, { id: '别处/乙', title: '乙', dir: '别处' }];
+  assert.equal(nextLinkTarget('甲', '工作/乙', dup), '工作/乙');
 });
 
 console.log(`\n${process.exitCode ? '有失败' : `全部通过（${passed} 项）`}\n`);

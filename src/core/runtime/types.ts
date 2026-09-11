@@ -47,6 +47,15 @@ export interface KernelConnection {
  */
 export type InterruptStrategy = 'protocol' | 'signal';
 
+export interface LaunchOptions {
+  /**
+   * 内核进程的工作目录，应是笔记库目录：
+   * 用户代码里的相对路径、Node 的 require 都以它为基准。
+   * 不给的话宿主会用内核脚本所在目录，那在桌面版里是只读的应用包。
+   */
+  cwd?: string;
+}
+
 export interface RuntimeProvider {
   id: string;
   lang: LangId;
@@ -55,7 +64,7 @@ export interface RuntimeProvider {
   interrupt: InterruptStrategy;
   /** 探测本地环境。返回 null 表示不可用。 */
   detect(host: HostBridge): Promise<RuntimeInfo | null>;
-  launch(host: HostBridge, info: RuntimeInfo): Promise<KernelConnection>;
+  launch(host: HostBridge, info: RuntimeInfo, opts?: LaunchOptions): Promise<KernelConnection>;
   install: InstallGuide;
 }
 

@@ -10,6 +10,7 @@ import {
   type HostBridge,
   type Platform,
   type ResolvedDeps,
+  type SpawnOptions,
 } from './HostBridge';
 
 type Listener<T> = (value: T) => void;
@@ -85,6 +86,9 @@ export class TauriHost implements HostBridge {
     } catch {
       host.kernels = '';
     }
+    // 页面重载后 JS 侧的内核句柄全没了，Rust 侧的进程还在。
+    // 新的一页开始前把上一代清掉，否则它们会一直活到应用退出
+    await invoke('kernel_kill_all').catch(() => undefined);
     return host;
   }
 
@@ -92,11 +96,11 @@ export class TauriHost implements HostBridge {
     return this.plat;
   }
 
-  async spawn(cmd: string, args: string[]): Promise<ChildProcess> {
+  async spawn(cmd: string, args: string[], opts?: SpawnOptions): Promise<ChildProcess> {
     const id = await invoke<number>('kernel_spawn', {
       cmd,
       args,
-      cwd: this.kernels || null,
+      cwd: opts?.cwd || this.kernels || null,
     });
     return new TauriChild(id);
   }
@@ -151,6 +155,10 @@ export class TauriHost implements HostBridge {
 
   async removeDir(path: string): Promise<void> {
     await invoke('remove_dir', { path });
+  }
+
+  async trash(path: string): Promise<void> {
+    await invoke('trash_path', { path });
   }
 
   async renameFile(from: string, to: string): Promise<void> {

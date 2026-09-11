@@ -28,10 +28,28 @@ export const LANG_BY_FENCE: Record<string, LangId> = {
 };
 
 /** 选一个不与内容冲突的围栏长度 */
-function fenceFor(source: string): string {
+export function fenceFor(source: string): string {
   let max = 2;
   for (const m of source.matchAll(/^ {0,3}(`{3,})/gm)) max = Math.max(max, m[1].length);
   return '`'.repeat(max + 1);
+}
+
+/**
+ * 文本 cell 的内容恰好是一段围栏代码时，转成代码 cell 应该去掉围栏、认出语言。
+ * 这是「文本里的代码块只展示」这条规则的另一半：想运行，一步就能转过去。
+ * 不是单个围栏块就原样返回 null，由调用方按普通文本处理。
+ */
+export function fenceToCode(source: string): { lang?: LangId; code: string } | null {
+  const m = /^\s*(`{3,}|~{3,})[ \t]*([^\s{`~]*)[^\n]*\n([\s\S]*?)\n?[ \t]*\1[ \t]*\s*$/.exec(source);
+  if (!m) return null;
+  const lang = LANG_BY_FENCE[m[2].toLowerCase()];
+  return { lang, code: m[3] };
+}
+
+/** 反过来：代码 cell 转文本时包上围栏，否则源码会被当 Markdown 渲染得面目全非 */
+export function codeToFence(code: string, lang: LangId): string {
+  const fence = fenceFor(code);
+  return `${fence}${FENCE_LANG[lang]}\n${code.replace(/\n$/, '')}\n${fence}`;
 }
 
 export function notebookToMarkdown(nb: Notebook): string {
@@ -62,6 +80,8 @@ export function notebookToMarkdown(nb: Notebook): string {
 }
 
 interface Frontmatter {
+  /** 我们自己写出来的文件才有这个标记 */
+  notex?: string;
   title?: string;
   created?: string;
   updated?: string;
@@ -69,6 +89,8 @@ interface Frontmatter {
 }
 
 function parseFrontmatter(text: string): { fm: Frontmatter; rest: string } {
+  // 别的编辑器可能在文件头写 BOM，不去掉的话 frontmatter 整个失效，`---` 就进了正文
+  text = text.replace(/^﻿/, '');
   const m = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(text);
   if (!m) return { fm: {}, rest: text };
   const fm: Frontmatter = {};
@@ -88,14 +110,28 @@ function parseFrontmatter(text: string): { fm: Frontmatter; rest: string } {
   return { fm, rest: text.slice(m[0].length) };
 }
 
+/**
+ * 哪些围栏是可执行 cell：
+ *
+ * - 我们自己写出的文件（frontmatter 带 notex 标记）里，可执行 cell 一定带 `{id=…}`。
+ *   没有 id 的围栏是用户写在文本 cell 里的展示代码，不该在重开时变成可运行的 cell。
+ * - 从别处拿来的 Markdown 没有这个约定，认得的语言一律当可执行 cell，
+ *   下次保存就会带上 id 和标记，从此进入前一种规则。
+ */
 export function markdownToNotebook(text: string, fallbackTitle = '未命名笔记'): Notebook {
   const { fm, rest } = parseFrontmatter(text);
+  const ownFile = fm.notex !== undefined;
   const lines = rest.split(/\r?\n/);
   const cells: Cell[] = [];
   let buffer: string[] = [];
 
   const flushMarkdown = () => {
-    const source = buffer.join('\n').trim();
+    // 只去掉首尾的空行，不动首行的缩进：四个空格开头就是缩进代码块，
+    // trim 掉它就变成了普通段落
+    const source = buffer
+      .join('\n')
+      .replace(/^(?:[ \t]*\r?\n)+/, '')
+      .replace(/\s+$/, '');
     buffer = [];
     if (source) cells.push({ id: uid('c'), type: 'md', source });
   };
@@ -123,8 +159,15 @@ export function markdownToNotebook(text: string, fallbackTitle = '未命名笔�
       continue;
     }
 
-    flushMarkdown();
     const idMatch = open[3] ? /id=([\w-]+)/.exec(open[3]) : null;
+    if (ownFile && !idMatch) {
+      // 文本 cell 里的展示代码：整段连围栏一起留在正文里
+      for (let j = i; j <= end; j += 1) buffer.push(lines[j]);
+      i = end;
+      continue;
+    }
+
+    flushMarkdown();
     const cell: CodeCell = {
       id: idMatch ? idMatch[1] : uid('c'),
       type: 'code',

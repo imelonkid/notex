@@ -17,7 +17,10 @@ export function InstallGuideCard({ lang, onRetryDetect, onOpenSettings }: Props)
   const provider = registry.providersFor(lang)[0];
   if (!provider) return null;
   const guide = provider.install;
-  const command = guide.commands[platform];
+  const state = registry.get(lang);
+  // 「找到了但启动失败」和「没找到」是两回事：前者给安装命令只会误导
+  const launchFailed = state.status === 'error' && !!state.info;
+  const command = launchFailed ? undefined : guide.commands[platform];
 
   const copy = async () => {
     if (!command) return;
@@ -42,8 +45,12 @@ export function InstallGuideCard({ lang, onRetryDetect, onOpenSettings }: Props)
 
   return (
     <div className="nx-install">
-      <div className="nx-install-title">{guide.title}</div>
-      <div className="nx-install-sub">需要 {guide.minVersion}</div>
+      <div className="nx-install-title">
+        {launchFailed ? `${provider.label} 内核启动失败` : guide.title}
+      </div>
+      <div className="nx-install-sub">
+        {launchFailed ? state.error || `无法启动 ${state.info?.path ?? ''}` : `需要 ${guide.minVersion}`}
+      </div>
 
       {command && (
         <div className="nx-install-cmd">

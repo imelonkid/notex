@@ -113,6 +113,8 @@ const CASES = {
     completeCode: 'words.st',
     spin: 'long n = 0; while (true) { n++; }',
     interrupt: 'protocol',
+    killRemote: 'System.exit(0)',
+    hugeValue: 'java.util.stream.IntStream.range(0, 200000).boxed().toList()',
   },
   python: {
     hello: 'print("你好, NoteX")\n6 * 7',
@@ -124,6 +126,8 @@ const CASES = {
     completeCode: 'os.pa',
     spin: 'n = 0\nwhile True:\n    n += 1',
     interrupt: 'signal',
+    hugeValue: 'list(range(200000))',
+    idleSigint: true,
   },
   js: {
     hello: 'console.log("你好, NoteX");\n6 * 7',
@@ -135,6 +139,13 @@ const CASES = {
     completeCode: 'JSON.pa',
     spin: 'let n = 0; for (;;) { n++; }',
     interrupt: 'signal',
+    hugeValue: '"x".repeat(200000)',
+    declareFn: 'function greet(name) { return "hi " + name; }',
+    useFn: 'greet("NoteX")',
+    declareClass: 'class Counter { constructor() { this.n = 3; } }',
+    useClass: 'new Counter().n',
+    pendingPromise: 'new Promise(() => {})',
+    topLevelAwait: 'await Promise.resolve(41 + 1)',
   },
 };
 
@@ -217,10 +228,88 @@ async function main() {
   msgs = await request('execute', { code: t.stateB });
   check('仍能执行并保有状态', msgs.some((m) => m.type === 'result' && m.data['text/plain'].includes('55')));
 
+  if (t.interrupt === 'protocol') {
+    // 协议中断不收敛时宿主会升级发 SIGINT。内核必须把它当成"中断当前 cell"，
+    // 而不是 JVM 默认的退出——否则一次中断就把所有变量清空了
+    console.log('\n7b. SIGINT 升级只中断 cell，不杀内核');
+    const id = 'spin2';
+    const spinMsgs = [];
+    const spinDone = new Promise((resolve) => {
+      waiters.set(id, { messages: spinMsgs, resolve });
+    });
+    proc.stdin.write(RS + JSON.stringify({ id, op: 'execute', code: t.spin }) + '\n');
+    await new Promise((r) => setTimeout(r, 1200));
+    proc.kill('SIGINT');
+    const finished = await Promise.race([
+      spinDone.then(() => true),
+      new Promise((r) => setTimeout(() => r(false), 8000)),
+    ]);
+    waiters.delete(id);
+    check('SIGINT 后收到 done', finished, '8 秒内没有收到 done');
+    check('内核进程仍然存活', proc.exitCode === null, `内核已退出，code = ${proc.exitCode}`);
+    msgs = await request('execute', { code: t.stateB });
+    check('变量仍然保留', msgs.some((m) => m.type === 'result' && m.data['text/plain'].includes('55')));
+  }
+
   console.log('\n8. 错误后内核仍然可用');
   await request('execute', { code: t.boom }).catch(() => []);
   msgs = await request('execute', { code: t.stateB });
   check('报错后仍能执行', msgs.some((m) => m.type === 'result' && m.data['text/plain'].includes('55')));
+
+  if (t.hugeValue) {
+    console.log('\n9. 超大结果被截断');
+    msgs = await request('execute', { code: t.hugeValue });
+    const text = msgs.find((m) => m.type === 'result')?.data['text/plain'] ?? '';
+    check('text/plain 有上限', text.length > 0 && text.length < 30000, `长度 ${text.length}`);
+    check('截断处有说明', text.includes('已截断'));
+  }
+
+  if (t.idleSigint) {
+    // 宿主升级发信号的时机由它自己定，可能落在 cell 已经结束、补全正在跑的时候。
+    // 空闲期和补全期连发几次 SIGINT，内核都不能退出
+    console.log('\n9b. 执行区间之外的 SIGINT 不杀内核');
+    proc.kill('SIGINT');
+    proc.kill('SIGINT');
+    const pending = request('complete', { code: t.completeCode, cursor: t.completeCode.length });
+    proc.kill('SIGINT');
+    await pending;
+    await new Promise((r) => setTimeout(r, 300));
+    check('内核进程仍然存活', proc.exitCode === null, `内核已退出，code = ${proc.exitCode}`);
+    msgs = await request('execute', { code: t.stateB });
+    check('变量仍然保留', msgs.some((m) => m.type === 'result' && m.data['text/plain'].includes('55')));
+  }
+
+  if (t.killRemote) {
+    console.log('\n10. 远端 JVM 退出后内核自愈');
+    msgs = await request('execute', { code: t.killRemote });
+    await request('execute', { code: t.stateA });
+    msgs = await request('execute', { code: t.stateB });
+    check('重建后仍能执行', msgs.some((m) => m.type === 'result' && m.data['text/plain'].includes('55')));
+  }
+
+  if (t.declareFn) {
+    console.log('\n11. 声明与异步');
+    await request('execute', { code: t.declareFn });
+    msgs = await request('execute', { code: t.useFn });
+    check('function 声明跨 cell 可见', msgs.some((m) => m.type === 'result' && m.data['text/plain'].includes('hi NoteX')));
+    await request('execute', { code: t.declareClass });
+    msgs = await request('execute', { code: t.useClass });
+    check('class 声明跨 cell 可见', msgs.some((m) => m.type === 'result' && m.data['text/plain'].includes('3')));
+    msgs = await request('execute', { code: t.topLevelAwait });
+    check('顶层 await 可用', msgs.some((m) => m.type === 'result' && m.data['text/plain'].includes('42')));
+
+    const id = 'pend1';
+    const pendMsgs = [];
+    const pendDone = new Promise((resolve) => waiters.set(id, { messages: pendMsgs, resolve }));
+    proc.stdin.write(RS + JSON.stringify({ id, op: 'execute', code: t.pendingPromise }) + '\n');
+    await new Promise((r) => setTimeout(r, 500));
+    proc.kill('SIGINT');
+    const finished = await Promise.race([pendDone.then(() => true), new Promise((r) => setTimeout(() => r(false), 5000))]);
+    waiters.delete(id);
+    check('挂起的 Promise 能被中断', finished && pendMsgs.some((m) => m.type === 'done' && m.status === 'aborted'));
+    msgs = await request('execute', { code: t.stateB });
+    check('中断后仍能执行', msgs.some((m) => m.type === 'result' && m.data['text/plain'].includes('55')));
+  }
 
   console.log(`\n${failures === 0 ? '全部通过' : failures + ' 项失败'}\n`);
   proc.stdin.write(RS + JSON.stringify({ id: 'bye', op: 'shutdown' }) + '\n');

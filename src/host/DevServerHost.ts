@@ -111,12 +111,13 @@ export class DevServerHost implements HostBridge {
     return this.plat;
   }
 
-  async spawn(cmd: string, args: string[], _opts?: SpawnOptions): Promise<ChildProcess> {
+  async spawn(cmd: string, args: string[], opts?: SpawnOptions): Promise<ChildProcess> {
     const params = new URLSearchParams({
       cmd,
       args: JSON.stringify(args),
       id: Math.random().toString(36).slice(2),
     });
+    if (opts?.cwd) params.set('cwd', opts.cwd);
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const ws = new WebSocket(`${proto}//${location.host}${BASE}/kernel?${params}`);
     return await new Promise<ChildProcess>((resolve, reject) => {
@@ -195,6 +196,10 @@ export class DevServerHost implements HostBridge {
 
   async removeDir(path: string): Promise<void> {
     await postJson('/rmdir', { path });
+  }
+
+  async trash(path: string): Promise<void> {
+    await postJson('/trash', { path });
   }
 
   async renameFile(from: string, to: string): Promise<void> {

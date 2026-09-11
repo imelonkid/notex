@@ -132,7 +132,7 @@ function Boot() {
 
   return (
     <ThemeLoader host={host}>
-      <RuntimeProvider host={host}>
+      <RuntimeProvider host={host} workDir={setup.vaultPath || undefined}>
         <App
           key={setup.vaultPath || 'local'}
           setup={setup}

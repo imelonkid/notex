@@ -139,23 +139,35 @@ export class KernelSession {
     this.pending.delete(id);
   }
 
+  /** 正在执行的那条请求；补全、类路径等其它挂起项不算 */
+  private currentExecute(): string | null {
+    for (const [id, p] of this.pending) if (p.handlers) return id;
+    return null;
+  }
+
   /**
    * 中断。信号型内核执行时读不到 stdin，直接发信号；
-   * 协议型先发消息，1 秒仍未收敛再升级到信号。
+   * 协议型先发消息，1 秒后**那条执行**仍未收敛再升级到信号。
+   *
+   * 升级只能看被中断的那条请求。以前看的是"还有没有挂起项"，
+   * 而中断后一秒内用户敲字触发的补全、紧接着运行的下一个 cell
+   * 都会让挂起项非空，于是信号照发，Java 内核收到 SIGINT 就整个退出，
+   * JShell 里的变量全丢——中断一个 cell 变成了重启内核。
    */
   async interrupt(): Promise<void> {
     if (this.interruptStrategy === 'signal') {
       await this.conn.interrupt();
       return;
     }
-    const target = [...this.pending.keys()][0] ?? '';
+    const target = this.currentExecute();
+    if (!target) return;
     try {
       await this.conn.send(encodeRequest({ id: nextId(), op: 'interrupt', target }));
     } catch {
       /* 连接已断 */
     }
     setTimeout(() => {
-      if (this.pending.size > 0) void this.conn.interrupt();
+      if (this.pending.has(target)) void this.conn.interrupt();
     }, 1000);
   }
 

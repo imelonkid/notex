@@ -76,17 +76,21 @@ export const javaProvider: RuntimeProvider = {
     return { providerId: 'java-local', version: found.version, path: found.path };
   },
 
-  async launch(host, info: RuntimeInfo) {
+  async launch(host, info: RuntimeInfo, opts) {
     const script = await host.kernelPath('java/JavaKernel.java');
-    const proc = await host.spawn(info.path, [
-      // 内核进程自己不需要图形界面；headless 顺带避免 macOS 上弹出 Dock 图标
-      '-Djava.awt.headless=true',
-      '-Dapple.awt.UIElement=true',
-      // 内核只做编译与转发，分层编译到第一层即可，启动更快
-      '-XX:TieredStopAtLevel=1',
-      '-XX:+UseSerialGC',
-      script,
-    ]);
+    const proc = await host.spawn(
+      info.path,
+      [
+        // 内核进程自己不需要图形界面；headless 顺带避免 macOS 上弹出 Dock 图标
+        '-Djava.awt.headless=true',
+        '-Dapple.awt.UIElement=true',
+        // 内核只做编译与转发，分层编译到第一层即可，启动更快
+        '-XX:TieredStopAtLevel=1',
+        '-XX:+UseSerialGC',
+        script,
+      ],
+      { cwd: opts?.cwd },
+    );
     return connectStdioKernel(proc);
   },
 
@@ -129,10 +133,10 @@ export const pythonProvider: RuntimeProvider = {
     return { providerId: 'python-local', version: found.version, path: found.path };
   },
 
-  async launch(host, info) {
+  async launch(host, info, opts) {
     const script = await host.kernelPath('python/kernel.py');
     // -u 关闭缓冲，保证 stream 消息实时到达
-    const proc = await host.spawn(info.path, ['-u', script]);
+    const proc = await host.spawn(info.path, ['-u', script], { cwd: opts?.cwd });
     return connectStdioKernel(proc);
   },
 
@@ -172,9 +176,9 @@ export const nodeProvider: RuntimeProvider = {
     return { providerId: 'js-node', version: found.version, path: found.path };
   },
 
-  async launch(host, info) {
+  async launch(host, info, opts) {
     const script = await host.kernelPath('node/kernel.mjs');
-    const proc = await host.spawn(info.path, [script]);
+    const proc = await host.spawn(info.path, [script], { cwd: opts?.cwd });
     return connectStdioKernel(proc);
   },
 

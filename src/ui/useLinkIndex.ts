@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { LinkIndex } from '@core/linkIndex';
-import type { Backlink } from '@core/linkIndex';
+import type { Backlink, SearchHit } from '@core/linkIndex';
 import type { NotebookRef, NotebookStore } from '@core/store/index';
 
 /**
@@ -83,5 +83,12 @@ export function useLinkIndex(store: NotebookStore | null, refs: NotebookRef[]) {
     [revision],
   );
 
-  return { ready, revision, backlinksOf, isBroken, summaryOf, touch, index: index.current };
+  /** 全库搜索，标题与正文 */
+  const search = useCallback(
+    (query: string): SearchHit[] => index.current.search(query),
+    // revision 变化时组件要重新取值
+    [revision],
+  );
+
+  return { ready, revision, backlinksOf, isBroken, summaryOf, search, touch, index: index.current };
 }

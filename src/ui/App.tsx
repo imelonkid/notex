@@ -4,7 +4,8 @@ import { writeClipboard } from './clipboard';
 import { LANGS, isCode, type LangId, type Output, type RunMark, type RunRecord } from '@core/model';
 import { exportIpynb, exportMarkdown, importNotebook } from '@core/files';
 import { parseDeps } from '@core/deps';
-import { resolveNoteLink } from '@core/links';
+import { nextLinkTarget, resolveNoteLink, rewriteNoteLinks } from '@core/links';
+import { SearchPalette } from './components/SearchPalette';
 import { MAX_DIR_DEPTH, baseOf, depthOf, dirOf, joinId } from '@core/store/paths';
 import type { StoreSetup } from '@core/store/index';
 import { Cell } from './components/Cell';
@@ -64,6 +65,7 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
   const folderViewRef = useRef(folderView);
   folderViewRef.current = folderView;
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [ask, setAsk] = useState<AskState | null>(null);
   /** 刚复制过的 cell，用于在按钮上短暂打勾 */
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -95,8 +97,11 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
 
   const links = useLinkIndex(setup.store, book.refs);
 
-  /** 正文与输出里的链接一律由应用接管，webview 绝不自己导航 */
-  const [linkNotice, setLinkNotice] = useState<string | null>(null);
+  /** 顶部的一次性提示条，可以带一个动作（比如删除后的「撤销」） */
+  const [notice, setNotice] = useState<{ text: string; action?: { label: string; run(): void } } | null>(
+    null,
+  );
+  const setLinkNotice = useCallback((text: string) => setNotice({ text }), []);
   /** 跳转到目标笔记后要滚到的小节，等目标渲染完再用 */
   const pendingHash = useRef<string | null>(null);
   const refsRef = useRef(book.refs);
@@ -163,10 +168,11 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
   }, [book.lastSaved, touchIndex]);
 
   useEffect(() => {
-    if (!linkNotice) return;
-    const t = setTimeout(() => setLinkNotice(null), 4000);
+    if (!notice) return;
+    // 带动作的提示多留一会儿，用户得有时间看清并点到它
+    const t = setTimeout(() => setNotice(null), notice.action ? 8000 : 4000);
     return () => clearTimeout(t);
-  }, [linkNotice]);
+  }, [notice]);
 
   useEffect(() => {
     localStorage.setItem('nx.sidebar.collapsed', sidebarCollapsed ? '1' : '0');
@@ -356,7 +362,7 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
     const lang: LangId = prevCode?.lang ?? 'python';
     const cell = type === 'md' ? newMarkdownCell() : newCodeCell(lang);
     debug.log('cell', '插入 cell', { index, type, lang: type === 'code' ? lang : undefined });
-    book.update(ops.insert(index, cell));
+    book.update(ops.insert(index, cell), { record: true });
     setActiveCellId(cell.id);
     if (type === 'md') setEditingId(cell.id);
   };
@@ -418,8 +424,36 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
     if (!cell) return debug.warn('cell', '转换失败：找不到 cell', { cellId });
     const prevCode = cells.filter(isCode).find((c) => c.id !== cellId);
     debug.log('cell', '转换 cell 类型', { cellId, from: cell.type });
-    book.update(ops.convert(cellId, prevCode?.lang ?? 'python'));
+    book.update(ops.convert(cellId, prevCode?.lang ?? 'python'), { record: true });
     if (isCode(cell)) setEditingId(cellId);
+  };
+
+  /**
+   * 删除 cell。没有确认框——确认框会被习惯性点掉，撤销才是真正的安全网：
+   * 记进撤销栈，并在顶部给一条带「撤销」的提示，⌘Z 也能拿回来。
+   */
+  const removeCell = (cellId: string) => {
+    const cell = nbRef.current?.cells.find((c) => c.id === cellId);
+    if (!cell) return;
+    debug.log('cell', '删除 cell', { cellId, type: cell.type });
+    book.update(ops.remove(cellId), { record: true });
+    if (activeCellIdRef.current === cellId) setActiveCellId(null);
+    setNotice({
+      text: `已删除${isCode(cell) ? '代码' : '文本'} cell`,
+      action: {
+        label: '撤销（⌘Z）',
+        run: () => {
+          book.undo();
+          setNotice(null);
+        },
+      },
+    });
+  };
+
+  /** ⌘Z / ⇧⌘Z 作用于结构操作；编辑器里的键由编辑器自己处理 */
+  const undoStructure = (redo: boolean) => {
+    const done = redo ? book.redo() : book.undo();
+    setNotice({ text: done ? (redo ? '已重做' : '已撤销') : redo ? '没有可重做的操作' : '没有可撤销的操作' });
   };
 
   /**
@@ -448,13 +482,16 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
       const key = e.key.toLowerCase();
       const active = activeCellIdRef.current;
 
-      // 文件夹页上没有 cell：只留侧栏、保存、快捷键面板几个全局键，
+      // 文件夹页上没有 cell：只留侧栏、保存、搜索、快捷键面板几个全局键，
       // 否则 ⌘↩、⌘⌫ 会去改背后那篇看不见的笔记
-      if (folderViewRef.current !== null && key !== 'b' && key !== 's' && key !== '/') return;
+      if (folderViewRef.current !== null && !['b', 's', 'k', '/'].includes(key)) return;
 
       if (key === 'b') {
         e.preventDefault();
         setSidebarCollapsed((c) => !c);
+      } else if (key === 'k') {
+        e.preventDefault();
+        setSearchOpen((v) => !v);
       } else if (key === 's') {
         e.preventDefault();
         void book.flush();
@@ -481,9 +518,12 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
           return debug.log('cell', '⌘⌫ 在编辑区内，交给编辑器', { cellId: active });
         }
         e.preventDefault();
-        debug.log('cell', '删除 cell（⌘⌫）', { cellId: active });
-        book.update(ops.remove(active));
-        setActiveCellId(null);
+        removeCell(active);
+      } else if (key === 'z') {
+        // 编辑器里的 ⌘Z 撤销的是文字，那是编辑器自己的栈
+        if (inEditor(e.target)) return;
+        e.preventDefault();
+        undoStructure(e.shiftKey);
       } else if (key === '/') {
         // CodeMirror 里 ⌘/ 是注释切换，别再抢着弹面板；
         // 工具栏上那个 ⌘/ 按钮任何时候都能打开
@@ -494,7 +534,7 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [book, runAll, insertAt, insertBelowActive, insertBelowActiveSameType, copyCell]);
+  }, [book, runAll, insertAt, insertBelowActive, insertBelowActiveSameType, copyCell, removeCell, undoStructure]);
 
 
 
@@ -514,7 +554,7 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
       const subs = childrenOf(dir);
       const self: MenuItem = {
         label: baseOf(dir),
-        onSelect: () => void book.moveNotebook(noteId, dir),
+        onSelect: () => void moveWithLinks(noteId, dir),
         disabled: dir === fromDir,
       };
       if (!subs.length) return self;
@@ -523,7 +563,7 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
         children: [
           {
             label: `放到「${baseOf(dir)}」`,
-            onSelect: () => void book.moveNotebook(noteId, dir),
+            onSelect: () => void moveWithLinks(noteId, dir),
             disabled: dir === fromDir,
           },
           ...subs.map((d) => ({ ...nodeFor(d), separatorBefore: d === subs[0] })),
@@ -534,7 +574,7 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
     return [
       {
         label: '根目录',
-        onSelect: () => void book.moveNotebook(noteId, ''),
+        onSelect: () => void moveWithLinks(noteId, ''),
         disabled: fromDir === '',
       },
       ...childrenOf('').map((d, i) => ({ ...nodeFor(d), separatorBefore: i === 0 })),
@@ -553,7 +593,7 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
         onSelect: () => {
           void askUser({
             title: '删除笔记',
-            message: `确定删除「${baseOf(id)}」？文件会从笔记库里移除。`,
+            message: `确定删除「${baseOf(id)}」？文件会移到废纸篓，可以从那里找回。`,
             confirmLabel: '删除',
             danger: true,
           }).then((ok) => {
@@ -589,13 +629,13 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
           label: '上移',
           separatorBefore: true,
           disabled: i === 0,
-          onSelect: () => book.update(ops.move(cellId, cells[i - 1].id)),
+          onSelect: () => book.update(ops.move(cellId, cells[i - 1].id), { record: true }),
         },
         {
           label: '下移',
           disabled: i === cells.length - 1,
           onSelect: () =>
-            book.update(ops.move(cellId, cells[i + 2]?.id ?? 'end')),
+            book.update(ops.move(cellId, cells[i + 2]?.id ?? 'end'), { record: true }),
         },
         ...(code
           ? [{ label: '运行  ⇧↩', onSelect: () => void runCell(cellId) }]
@@ -609,7 +649,7 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
           label: '删除 cell  ⌘⌫',
           danger: true,
           separatorBefore: true,
-          onSelect: () => book.update(ops.remove(cellId)),
+          onSelect: () => removeCell(cellId),
         },
       ],
     });
@@ -637,8 +677,8 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
           void askUser({
             title: '删除文件夹',
             message: inside.length
-              ? `「${baseOf(dir)}」里有 ${inside.length} 篇笔记，一并删除？`
-              : `确定删除空文件夹「${baseOf(dir)}」？`,
+              ? `「${baseOf(dir)}」里有 ${inside.length} 篇笔记，整个文件夹（含其中所有文件）会移到废纸篓。`
+              : `确定删除空文件夹「${baseOf(dir)}」？它会移到废纸篓。`,
             confirmLabel: '删除',
             danger: true,
           }).then((ok) => {
@@ -705,6 +745,68 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
     );
   };
 
+  /**
+   * 改名或移动一篇笔记，然后把别的笔记里指向它的链接改过来。
+   *
+   * 反链必须在改名之前取：改完旧 id 就解析不到了，索引里查不出谁引用过它。
+   * 当前打开的那篇走内存里的模型改，其余直接改文件；改完立刻更新索引，
+   * 反链面板不必等下一轮轮询。
+   */
+  const withLinkRewrite = async (id: string, act: () => Promise<string | null>) => {
+    const sources = links.index.backlinks(id).map((b) => b.from);
+    const oldRefs = refsRef.current;
+    const nextId = await act();
+    if (!nextId || nextId === id || !sources.length) return nextId;
+
+    // 判断新名字是否和别的笔记重名，要用改名之后的清单
+    const newRefs = oldRefs.map((r) =>
+      r.id === id ? { ...r, id: nextId, title: baseOf(nextId), dir: dirOf(nextId) } : r,
+    );
+    let notes = 0;
+    let total = 0;
+    for (const from of sources) {
+      const rewrite = (target: string) =>
+        resolveNoteLink(target, oldRefs, dirOf(from)) === id ? nextLinkTarget(target, nextId, newRefs) : null;
+      try {
+        if (from === activeIdRef.current) {
+          let count = 0;
+          book.update((d) => {
+            for (const c of d.cells) {
+              if (c.type !== 'md') continue;
+              const r = rewriteNoteLinks(c.source, rewrite);
+              if (r.count) {
+                c.source = r.text;
+                count += r.count;
+              }
+            }
+          });
+          if (count) {
+            notes += 1;
+            total += count;
+          }
+          continue;
+        }
+        if (!setup.store.readRaw || !setup.store.writeRaw) continue;
+        const raw = await setup.store.readRaw(from);
+        const r = rewriteNoteLinks(raw, rewrite);
+        if (!r.count) continue;
+        await setup.store.writeRaw(from, r.text);
+        links.touch(from, r.text);
+        notes += 1;
+        total += r.count;
+      } catch (e) {
+        debug.warn('links', '改写链接失败', { from, error: String((e as Error)?.message ?? e) });
+      }
+    }
+    debug.log('links', '改名后改写链接', { from: id, to: nextId, notes, links: total });
+    if (notes) setNotice({ text: `已更新 ${notes} 篇笔记里的 ${total} 处链接，指向「${baseOf(nextId)}」` });
+    return nextId;
+  };
+
+  const renameWithLinks = (id: string, title: string) =>
+    withLinkRewrite(id, () => book.renameNotebook(id, title));
+  const moveWithLinks = (id: string, dir: string) => withLinkRewrite(id, () => book.moveNotebook(id, dir));
+
   /** 打开文件夹页。当前笔记没存上就不切，和切换笔记是同一个规矩 */
   const openFolder = async (dir: string) => {
     if (!(await book.leaveCurrent())) return;
@@ -727,7 +829,7 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
 
   /** 把正在拖的笔记放进某个文件夹：侧栏和文件夹页共用 */
   const dropNoteInto = (dir: string) => {
-    if (dragNoteId) void book.moveNotebook(dragNoteId, dir);
+    if (dragNoteId) void moveWithLinks(dragNoteId, dir);
     setDragNoteId(null);
     setDropDir(null);
   };
@@ -782,6 +884,14 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
           </button>
           <button
             className="nx-icon-btn"
+            title="搜索笔记（⌘K）"
+            aria-label="搜索笔记"
+            onClick={() => setSearchOpen(true)}
+          >
+            ⌕
+          </button>
+          <button
+            className="nx-icon-btn"
             title="重新读取笔记库目录"
             aria-label="刷新笔记列表"
             data-busy={refreshing}
@@ -820,7 +930,7 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
             onNoteMenu={openNoteMenu}
             renamingId={renamingId}
             onRenamingChange={setRenamingId}
-            onRename={(id, title) => void book.renameNotebook(id, title)}
+            onRename={(id, title) => void renameWithLinks(id, title)}
             onFolderMenu={openFolderMenu}
             onDragStart={setDragNoteId}
             onDragEnd={() => {
@@ -902,7 +1012,19 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
               </span>
             )}
           </div>
-          {linkNotice && <div className="nx-banner">{linkNotice}</div>}
+          {notice && (
+            <div className="nx-banner" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span>{notice.text}</span>
+              {notice.action && (
+                <>
+                  <span style={{ flex: 1 }} />
+                  <button className="nx-btn-mini" onClick={notice.action.run}>
+                    {notice.action.label}
+                  </button>
+                </>
+              )}
+            </div>
+          )}
           {book.error && <div className="nx-banner nx-banner-error">{book.error}</div>}
           {book.missingFile && (
             <div className="nx-banner nx-banner-warn">
@@ -962,7 +1084,10 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
                 value={nb.title}
                 title="笔记标题"
                 onChange={(e) => book.update((d) => void (d.title = e.target.value))}
-                onBlur={(e) => void book.retitle(e.target.value)}
+                onBlur={(e) => {
+                  const id = activeIdRef.current;
+                  if (id) void withLinkRewrite(id, () => book.retitle(e.target.value));
+                }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
                 }}
@@ -1001,7 +1126,7 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
                       onClick={() => {
                         if (!activeCell) return;
                         if (!isCode(activeCell)) convertCell(activeCell.id);
-                        book.update(ops.setLang(activeCell.id, l.id));
+                        book.update(ops.setLang(activeCell.id, l.id), { record: true });
                       }}
                     >
                       {l.label}
@@ -1042,7 +1167,7 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
                         {
                           label: '清空输出',
                           onSelect: () => {
-                            book.update(ops.clearOutputs());
+                            book.update(ops.clearOutputs(), { record: true });
                             setRunMarks({});
                           },
                         },
@@ -1076,13 +1201,13 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
                   onMenu={(x, y, align) => openCellMenu(cell.id, x, y, align)}
                   dropActive={!!dragId && dropId === cell.id}
                   onSource={(v) => book.update(ops.setSource(cell.id, v))}
-                  onLang={(l) => book.update(ops.setLang(cell.id, l))}
+                  onLang={(l) => book.update(ops.setLang(cell.id, l), { record: true })}
                   onRun={() => void runCell(cell.id)}
                   onInterrupt={() => {
                     const lang = isCode(cell) ? cell.lang : 'java';
                     void registry.get(lang).session?.interrupt();
                   }}
-                  onRemove={() => book.update(ops.remove(cell.id))}
+                  onRemove={() => removeCell(cell.id)}
                   copied={copiedId === cell.id}
                   onCopy={() => void copyCell(cell.id)}
                   onEdit={() => setEditingId(cell.id)}
@@ -1094,7 +1219,7 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
                   }}
                   onDragOver={() => dragId && setDropId(cell.id)}
                   onDrop={() => {
-                    if (dragId && dragId !== cell.id) book.update(ops.move(dragId, cell.id));
+                    if (dragId && dragId !== cell.id) book.update(ops.move(dragId, cell.id), { record: true });
                     setDragId(null);
                     setDropId(null);
                   }}
@@ -1119,7 +1244,7 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
                 }}
                 onDrop={(e) => {
                   e.preventDefault();
-                  if (dragId) book.update(ops.move(dragId, 'end'));
+                  if (dragId) book.update(ops.move(dragId, 'end'), { record: true });
                   setDragId(null);
                   setDropId(null);
                 }}
@@ -1151,6 +1276,15 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
       </main>
 
       {shortcutsOpen && <Shortcuts onClose={() => setShortcutsOpen(false)} />}
+      {searchOpen && (
+        <SearchPalette
+          notes={book.refs}
+          ready={links.ready}
+          search={links.search}
+          onOpen={(id) => void openNote(id)}
+          onClose={() => setSearchOpen(false)}
+        />
+      )}
       {ask && <AskModal state={ask} />}
       {menu && <ContextMenu state={menu} onClose={() => setMenu(null)} />}
 

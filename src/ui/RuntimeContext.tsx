@@ -15,9 +15,22 @@ interface RuntimeContextValue {
 
 const Ctx = createContext<RuntimeContextValue | null>(null);
 
-export function RuntimeProvider({ host, children }: { host: HostBridge; children: ReactNode }) {
+export function RuntimeProvider({
+  host,
+  workDir,
+  children,
+}: {
+  host: HostBridge;
+  /** 笔记库目录，作为内核进程的工作目录 */
+  workDir?: string;
+  children: ReactNode;
+}) {
   const registry = useMemo(() => new RuntimeRegistry(host, ALL_PROVIDERS), [host]);
   const [revision, setRevision] = useState(0);
+
+  useEffect(() => {
+    registry.setWorkDir(workDir);
+  }, [registry, workDir]);
 
   useEffect(() => {
     const unsub = registry.subscribe(() => setRevision((r) => r + 1));

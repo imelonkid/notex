@@ -14,6 +14,7 @@ const GROUPS: Array<{ title: string; items: Array<[string, string]> }> = [
       ['⌥⌘↓ / ⌥⌘↑', '在下方 / 上方插入文本 cell'],
       ['⇧⌘C', '复制当前 cell 的原文'],
       ['⌘⌫', '删除当前 cell'],
+      ['⌘Z / ⇧⌘Z', '撤销 / 重做 cell 的删除、移动、转换（编辑器内则撤销文字）'],
       ['[[', '在文本里唤出笔记补全'],
     ],
   },
@@ -21,6 +22,7 @@ const GROUPS: Array<{ title: string; items: Array<[string, string]> }> = [
     title: '其它',
     items: [
       ['⌘S', '立即保存'],
+      ['⌘K', '搜索笔记 / 快速切换'],
       ['⌘B', '折叠或展开侧栏'],
       ['⌘/', '打开这个面板'],
     ],

@@ -38,8 +38,16 @@ function makeSink(name) {
 const outSink = makeSink('stdout');
 const errSink = makeSink('stderr');
 
+/** 结果文本的上限。几十 MB 的一行塞进界面会把页面卡死，看不到也没意义 */
+const MAX_TEXT = 20_000;
+
+function clip(text) {
+  if (text.length <= MAX_TEXT) return text;
+  return text.slice(0, MAX_TEXT) + `\n…（共 ${text.length} 字符，已截断）`;
+}
+
 const fmt = (v) =>
-  typeof v === 'string' ? v : inspect(v, { depth: 3, colors: false, breakLength: 100 });
+  clip(typeof v === 'string' ? v : inspect(v, { depth: 3, colors: false, breakLength: 100 }));
 
 const sandboxConsole = {
   log: (...a) => outSink.push(a.map(fmt).join(' ') + '\n'),
@@ -97,21 +105,57 @@ function cleanStack(err) {
     .slice(0, 12);
 }
 
+/**
+ * 以声明开头的 cell 不能按表达式编译：`(function foo() {})` 是合法的命名函数表达式，
+ * 编译能过、也有返回值，但 foo 不会绑定进上下文，下一个 cell 就找不到它了。
+ */
+const DECLARATION_START = /^\s*(?:async\s+function\b|function\b|class\b|let\b|const\b|var\b)/;
+
+function compileCell(code) {
+  const attempts = [];
+  if (!DECLARATION_START.test(code)) attempts.push(`(${code}\n)`);
+  attempts.push(code);
+  // 顶层 await 在 Script 里是语法错误。包进 async 函数能跑起来，
+  // 代价是里面的 let/const 不会留在上下文里；先让它能用，比直接报错好
+  if (/\bawait\b/.test(code)) {
+    attempts.push(`(async () => (${code}\n))()`);
+    attempts.push(`(async () => {\n${code}\n})()`);
+  }
+  let lastError;
+  for (const source of attempts) {
+    try {
+      return new vm.Script(source, { filename: 'cell.js' });
+    } catch (e) {
+      lastError = e;
+    }
+  }
+  throw lastError;
+}
+
+/**
+ * breakOnSigint 只能打断同步代码。返回值是个还没落定的 Promise 时
+ * （慢请求、永远不 resolve 的 Promise），中断信号得由这里接住，
+ * 否则唯一的出路是重启内核。
+ */
+function awaitInterruptible(promise) {
+  let onSigint;
+  const interrupted = new Promise((_, reject) => {
+    onSigint = () => reject(new Error('Script execution was interrupted by SIGINT'));
+    process.on('SIGINT', onSigint);
+  });
+  return Promise.race([promise, interrupted]).finally(() => process.off('SIGINT', onSigint));
+}
+
 async function execute(id, code) {
   currentId = id;
   let status = 'ok';
   try {
-    // 先尝试编译成表达式以便拿到返回值，编译不过再按语句块编译。
-    // 编译与执行分开，避免用 instanceof 判断跨 realm 的 SyntaxError。
-    let script;
-    try {
-      script = new vm.Script(`(${code}\n)`, { filename: 'cell.js' });
-    } catch {
-      script = new vm.Script(code, { filename: 'cell.js' });
-    }
+    // 编译与执行分开，避免用 instanceof 判断跨 realm 的 SyntaxError
+    const script = compileCell(code);
     // breakOnSigint 让同步死循环也能被 SIGINT 打断，
     // 否则事件循环被占死，连 stdin 都读不到。
-    const value = await script.runInContext(context, { breakOnSigint: true });
+    let value = script.runInContext(context, { breakOnSigint: true });
+    if (value && typeof value.then === 'function') value = await awaitInterruptible(value);
     if (value !== undefined) {
       emit({ id, type: 'result', data: resultBundle(value) });
     }

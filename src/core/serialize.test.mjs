@@ -10,6 +10,8 @@ const {
   markdownToNotebook,
   outputsToJson,
   applyOutputsJson,
+  fenceToCode,
+  codeToFence,
 } = await import('./serialize.ts');
 const { notebookToIpynb, ipynbToNotebook } = await import('./ipynb.ts');
 
@@ -241,6 +243,63 @@ test('外部 ipynb（无 NoteX 元数据）按 kernelspec 判定语言', () => {
   assert.equal(nb.cells.length, 2);
   assert.equal(nb.cells[1].lang, 'python');
   assert.equal(nb.cells[1].outputs[0].text, '1\n');
+});
+
+console.log('\n外部编辑器写出来的文件');
+
+test('文件头带 BOM 时 frontmatter 照常识别', () => {
+  const nb = markdownToNotebook('﻿---\nnotex: 1\ntitle: "带 BOM"\n---\n\n正文');
+  assert.equal(nb.title, '带 BOM');
+  assert.equal(nb.cells.length, 1);
+  assert.equal(nb.cells[0].source, '正文');
+});
+
+test('文本 cell 首行的缩进保留，缩进代码块不会变成段落', () => {
+  const nb = markdownToNotebook('\n\n    indented code\n正文\n\n');
+  assert.equal(nb.cells[0].source, '    indented code\n正文');
+});
+
+console.log('\n文本里的代码块只展示，带 id 的围栏才运行');
+
+test('自己写出的文件里，没有 id 的围栏留在文本 cell', () => {
+  const md = '---\nnotex: 1\ntitle: "t"\n---\n说明：\n\n```python\nprint("只展示")\n```\n\n结尾\n\n```python {id=c9}\nx = 1\n```\n';
+  const nb = markdownToNotebook(md);
+  assert.deepEqual(
+    nb.cells.map((c) => c.type),
+    ['md', 'code'],
+  );
+  assert.equal(nb.cells[0].source, '说明：\n\n```python\nprint("只展示")\n```\n\n结尾');
+  assert.equal(nb.cells[1].id, 'c9');
+});
+
+test('别处来的 Markdown 没有约定，认得的围栏都当可执行 cell', () => {
+  const nb = markdownToNotebook('# 外来\n\n```python\nprint(1)\n```\n');
+  assert.deepEqual(
+    nb.cells.map((c) => c.type),
+    ['md', 'code'],
+  );
+  assert.equal(nb.cells[1].lang, 'python');
+});
+
+test('含展示代码块的文本 cell 往返稳定', () => {
+  const nb = markdownToNotebook('---\nnotex: 1\n---\n');
+  nb.cells = [{ id: 'c1', type: 'md', source: '看这段：\n\n```js\nconsole.log(1)\n```' }];
+  const back = markdownToNotebook(notebookToMarkdown(nb));
+  assert.equal(back.cells.length, 1);
+  assert.equal(back.cells[0].type, 'md');
+  assert.equal(back.cells[0].source, nb.cells[0].source);
+});
+
+test('文本转代码：单个围栏块去掉围栏并认出语言', () => {
+  assert.deepEqual(fenceToCode('```python\nprint(1)\n```'), { lang: 'python', code: 'print(1)' });
+  assert.deepEqual(fenceToCode('~~~js title="x"\na\nb\n~~~\n'), { lang: 'js', code: 'a\nb' });
+  assert.equal(fenceToCode('普通文本\n```py\n1\n```'), null);
+  assert.equal(fenceToCode('```\nplain\n```').lang, undefined);
+});
+
+test('代码转文本：包上围栏，围栏长度避开内容里的反引号', () => {
+  assert.equal(codeToFence('x = 1\n', 'python'), '```python\nx = 1\n```');
+  assert.equal(codeToFence('```\ninner\n```', 'js'), '````javascript\n```\ninner\n```\n````');
 });
 
 console.log(`\n${process.exitCode ? '有失败' : `全部通过（${passed} 项）`}\n`);

@@ -7,6 +7,7 @@ import type { Plugin, ViteDevServer } from 'vite';
 import { spawn as nodeSpawn, execFile, type ChildProcess as NodeChild } from 'node:child_process';
 import { promisify } from 'node:util';
 import { readFile, writeFile, access, readdir, mkdir, stat, rm, rename } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import os from 'node:os';
@@ -39,14 +40,92 @@ async function readBody(req: import('node:http').IncomingMessage): Promise<any> 
   }
 }
 
+/**
+ * 这个插件把本机的进程与文件能力暴露在 HTTP/WebSocket 上，
+ * 而浏览器对跨源 WebSocket 不做同源限制，跨源的 no-cors POST 也能送达。
+ * 不校验来源的话，开着 `pnpm dev` 时访问任意网页就等于把机器交出去。
+ * 所以每个请求都要满足：Host 是本机，且 Origin（若有）也是本机。
+ */
+const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
+
+function hostnameOf(value: string | undefined): string | null {
+  if (!value) return null;
+  try {
+    return new URL(value.includes('://') ? value : `http://${value}`).hostname;
+  } catch {
+    return null;
+  }
+}
+
+function isLocalRequest(req: import('node:http').IncomingMessage): boolean {
+  const host = hostnameOf(req.headers.host);
+  if (!host || !LOCAL_HOSTS.has(host)) return false;
+  const origin = req.headers.origin;
+  if (origin) {
+    const originHost = hostnameOf(origin);
+    return !!originHost && LOCAL_HOSTS.has(originHost);
+  }
+  // 浏览器发跨源请求一定带 Origin 或 Sec-Fetch-Site；两者都没有的是 curl 之类的本机工具
+  const site = req.headers['sec-fetch-site'];
+  return site === undefined || site === 'same-origin' || site === 'none';
+}
+
+/** 能作为内核进程启动的命令：只有三种语言的运行时本体 */
+const RUNTIME_BIN = /^(java|python3?(?:\.\d+)?|node)(?:\.exe)?$/i;
+/** exec 只用于探测版本、解析依赖，命令面同样收紧 */
+const EXEC_BIN = /^(java|python3?(?:\.\d+)?|node|mvn|curl)(?:\.exe|\.cmd|\.bat)?$/i;
+
+function assertBinary(cmd: unknown, allowed: RegExp): string {
+  if (typeof cmd !== 'string' || !cmd.trim()) throw new Error('缺少命令');
+  if (!allowed.test(path.basename(cmd))) throw new Error('不允许的命令：' + cmd);
+  return cmd;
+}
+
 /** 只允许启动 kernels/ 目录下的脚本，防止任意命令执行 */
-function assertKernelScript(args: string[]) {
-  const script = args.find((a) => /\.(java|py|mjs|js)$/.test(a));
-  if (!script) return;
+function assertKernelScript(args: unknown): string[] {
+  if (!Array.isArray(args) || !args.every((a) => typeof a === 'string')) {
+    throw new Error('参数格式不正确');
+  }
+  const script = (args as string[]).find((a) => /\.(java|py|mjs|js)$/.test(a));
+  // 找不到脚本参数必须拒绝：放行就等于允许用运行时执行任意代码
+  if (!script) throw new Error('缺少内核脚本参数');
   const resolved = path.resolve(script);
   if (!resolved.startsWith(KERNELS + path.sep)) {
     throw new Error('拒绝启动 kernels/ 之外的脚本：' + script);
   }
+  return args as string[];
+}
+
+/**
+ * 「废纸篓」的开发期实现：挪进 ~/.notex/trash，文件名前加时间戳。
+ * 桌面版走 Rust 侧的系统废纸篓；这里不用 Finder 的 AppleScript，
+ * 那条路实测要等几十秒（Finder 自动化授权与启动），开发时受不了。
+ * Linux 上有 gio 就顺手用一下，它是即时的。
+ */
+async function trashPath(target: string): Promise<void> {
+  if (!target) throw new Error('缺少路径');
+  try {
+    await access(target);
+  } catch {
+    return;
+  }
+  const abs = path.resolve(target);
+  if (process.platform === 'linux') {
+    try {
+      await execFileAsync('gio', ['trash', abs]);
+      return;
+    } catch {
+      /* 没有 gio 时走兜底 */
+    }
+  }
+  const dir = path.join(os.homedir(), '.notex', 'trash');
+  await mkdir(dir, { recursive: true });
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  await rename(abs, path.join(dir, `${stamp} ${path.basename(abs)}`));
+}
+
+function isJsonPost(req: import('node:http').IncomingMessage): boolean {
+  return req.method === 'POST' && /^application\/json\b/i.test(req.headers['content-type'] ?? '');
 }
 
 export function hostPlugin(): Plugin {
@@ -60,23 +139,33 @@ export function hostPlugin(): Plugin {
       server.httpServer?.on('upgrade', (req, socket, head) => {
         const url = new URL(req.url ?? '/', 'http://localhost');
         if (url.pathname !== '/__host/kernel') return;
+        if (!isLocalRequest(req)) {
+          socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n');
+          socket.destroy();
+          return;
+        }
         wss.handleUpgrade(req, socket as any, head, (ws) => {
-          const cmd = url.searchParams.get('cmd') ?? '';
-          const args = JSON.parse(url.searchParams.get('args') ?? '[]') as string[];
           const id = url.searchParams.get('id') ?? Math.random().toString(36).slice(2);
 
+          let cmd: string;
+          let args: string[];
           try {
-            assertKernelScript(args);
+            cmd = assertBinary(url.searchParams.get('cmd'), RUNTIME_BIN);
+            args = assertKernelScript(JSON.parse(url.searchParams.get('args') ?? '[]'));
           } catch (e) {
             ws.send(JSON.stringify({ ch: 'error', text: String((e as Error).message) }));
             ws.close();
             return;
           }
 
+          // 工作目录由前端指定（笔记库）；没给或不存在就退回 kernels 目录
+          const wanted = url.searchParams.get('cwd');
+          const cwd = wanted && existsSync(wanted) ? wanted : KERNELS;
+
           let proc: NodeChild;
           try {
             proc = nodeSpawn(cmd, args, {
-              cwd: KERNELS,
+              cwd,
               env: { ...process.env },
               stdio: ['pipe', 'pipe', 'pipe'],
             });
@@ -132,6 +221,11 @@ export function hostPlugin(): Plugin {
 
       server.middlewares.use('/__host', async (req, res, next) => {
         const url = new URL(req.url ?? '/', 'http://localhost');
+        if (!isLocalRequest(req)) return json(res, 403, { error: '只接受来自本机页面的请求' });
+        // 改动本机状态的接口一律要求 JSON POST：text/plain 的简单请求跨源也能送达
+        if (req.method === 'POST' && !isJsonPost(req)) {
+          return json(res, 415, { error: '需要 content-type: application/json' });
+        }
         try {
           if (url.pathname === '/info') {
             return json(res, 200, { platform: process.platform, kernels: KERNELS, home: os.homedir() });
@@ -152,8 +246,11 @@ export function hostPlugin(): Plugin {
           }
           if (url.pathname === '/exec' && req.method === 'POST') {
             const body = await readBody(req);
+            const cmd = assertBinary(body.cmd, EXEC_BIN);
+            const args: unknown[] = Array.isArray(body.args) ? body.args : [];
+            if (!args.every((a) => typeof a === 'string')) throw new Error('参数格式不正确');
             try {
-              const { stdout, stderr } = await execFileAsync(body.cmd, body.args ?? [], {
+              const { stdout, stderr } = await execFileAsync(cmd, args as string[], {
                 timeout: 15000,
                 maxBuffer: 4 * 1024 * 1024,
               });
@@ -212,6 +309,11 @@ export function hostPlugin(): Plugin {
           if (url.pathname === '/remove' && req.method === 'POST') {
             const body = await readBody(req);
             await rm(body.path, { force: true });
+            return json(res, 200, { ok: true });
+          }
+          if (url.pathname === '/trash' && req.method === 'POST') {
+            const body = await readBody(req);
+            await trashPath(String(body.path ?? ''));
             return json(res, 200, { ok: true });
           }
           if (url.pathname === '/rmdir' && req.method === 'POST') {

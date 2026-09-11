@@ -1853,3 +1853,109 @@ button.nx-folder-caret:hover {
   background: var(--nx-bg-subtle);
   border-color: var(--nx-border-strong);
 }
+
+/* ---- 搜索面板（⌘K） ---- */
+.nx-palette-backdrop {
+  align-items: flex-start;
+  padding-top: 12vh;
+}
+.nx-palette {
+  background: var(--nx-bg);
+  border: 1px solid var(--nx-border-strong);
+  border-radius: 8px;
+  width: min(620px, 92vw);
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 16px 48px var(--nx-shadow);
+  overflow: hidden;
+}
+.nx-palette-input {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--nx-border);
+  color: var(--nx-fg-muted);
+}
+.nx-palette-input input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--nx-fg);
+  font: inherit;
+  font-size: 15px;
+}
+.nx-palette-list {
+  overflow-y: auto;
+  padding: 6px;
+}
+.nx-palette-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  color: var(--nx-fg);
+  font: inherit;
+  padding: 8px 10px;
+  border-radius: var(--nx-radius-sm);
+  cursor: pointer;
+}
+.nx-palette-item[data-active='true'] {
+  background: var(--nx-bg-active);
+}
+.nx-palette-icon {
+  color: var(--nx-fg-faint);
+  padding-top: 2px;
+  flex-shrink: 0;
+}
+.nx-palette-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.nx-palette-title {
+  font-size: 14px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.nx-palette-dir {
+  font-size: 11.5px;
+  color: var(--nx-fg-faint);
+}
+.nx-palette-snippet {
+  font-size: 12.5px;
+  color: var(--nx-fg-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nx-palette-mark {
+  background: transparent;
+  color: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-color: var(--nx-accent, currentColor);
+  text-underline-offset: 2px;
+}
+.nx-palette-empty {
+  padding: 24px 12px;
+  text-align: center;
+  color: var(--nx-fg-faint);
+  font-size: 13px;
+}
+.nx-palette-foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--nx-border);
+  font-size: 11.5px;
+  color: var(--nx-fg-faint);
+}

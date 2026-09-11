@@ -24,6 +24,8 @@ export class RuntimeRegistry {
   private listeners = new Set<() => void>();
   private restartListeners = new Set<(lang: LangId) => void>();
   private launching = new Map<LangId, Promise<KernelSession | null>>();
+  /** 内核的工作目录，即笔记库；打开笔记库后由界面层设置 */
+  private workDir: string | undefined;
 
   constructor(
     private host: HostBridge,
@@ -38,6 +40,11 @@ export class RuntimeRegistry {
   subscribe(cb: () => void): () => void {
     this.listeners.add(cb);
     return () => this.listeners.delete(cb);
+  }
+
+  /** 只影响之后启动的内核；已在跑的不换目录，免得用户手里的相对路径突然失效 */
+  setWorkDir(dir: string | undefined) {
+    this.workDir = dir || undefined;
   }
 
   private emit() {
@@ -144,14 +151,24 @@ export class RuntimeRegistry {
 
     const task = (async (): Promise<KernelSession | null> => {
       let state = this.get(lang);
-      if (state.status === 'unknown' || state.status === 'missing') {
-        state = await this.detect(lang, state.status === 'missing');
+      // 上次启动失败也要重探：失败的原因常常就是路径变了，
+      // 只对 unknown/missing 重探的话会一直拿着失效的路径撞墙
+      if (state.status === 'unknown' || state.status === 'missing' || state.status === 'error') {
+        state = await this.detect(lang, state.status !== 'unknown');
       }
       if (!state.info || !state.provider) return null;
 
+      // 缓存来自 localStorage，路径可能早已不存在（卸载、换了版本管理器）。
+      // 启动前核对一次，没了就重探，而不是把"文件不存在"当成启动失败报给用户
+      const stillThere = await this.host.fileExists(state.info.path).catch(() => true);
+      if (!stillThere) {
+        state = await this.detect(lang, true);
+        if (!state.info || !state.provider) return null;
+      }
+
       this.patch(lang, { status: 'starting', error: undefined });
       try {
-        const conn = await state.provider.launch(this.host, state.info);
+        const conn = await state.provider.launch(this.host, state.info, { cwd: this.workDir });
         const session = new KernelSession(
           conn,
           state.provider.id,
