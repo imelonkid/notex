@@ -46,7 +46,7 @@ export interface Catalog {
 
 /** 默认清单地址；可在 config.json 的 runtimeCatalog 里换成镜像或自建源 */
 export const DEFAULT_CATALOG_URL =
-  'https://raw.githubusercontent.com/imelonkid/notex/master/runtimes/catalog.json';
+  'https://raw.githubusercontent.com/imelonkid/notex-runtimes/master/catalog.json';
 
 const ID_RE = /^[a-z][a-z0-9-]{1,40}$/;
 const VERSION_RE = /^[0-9A-Za-z.+-]{1,40}$/;
