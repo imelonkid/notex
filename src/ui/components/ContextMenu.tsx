@@ -21,6 +21,8 @@ export interface MenuState {
    * 否则菜单永远向右溢出、只能被贴边夹住，看着像是没对齐。
    */
   align?: 'left' | 'right';
+  /** 'above' 表示 y 是下边缘：从侧栏底部弹出时往上长，不然会被窗口底边夹住 */
+  placement?: 'below' | 'above';
 }
 
 /** 贴着鼠标弹出的菜单，点别处或按 Esc 关闭 */
@@ -35,11 +37,12 @@ export function ContextMenu({ state, onClose }: { state: MenuState; onClose(): v
     const { width, height } = el.getBoundingClientRect();
     const margin = 8;
     const wanted = state.align === 'right' ? state.x - width : state.x;
+    const top = state.placement === 'above' ? state.y - height : state.y;
     setPos({
       left: Math.max(margin, Math.min(wanted, window.innerWidth - width - margin)),
-      top: Math.min(state.y, window.innerHeight - height - margin),
+      top: Math.max(margin, Math.min(top, window.innerHeight - height - margin)),
     });
-  }, [state.x, state.y, state.align, state.items]);
+  }, [state.x, state.y, state.align, state.placement, state.items]);
 
   useEffect(() => {
     const onDown = (e: MouseEvent) => {

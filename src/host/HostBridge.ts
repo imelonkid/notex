@@ -12,8 +12,13 @@ export class HostCapabilityError extends Error {
 
 export interface SpawnOptions {
   cwd?: string;
-  env?: Record<string, string>;
+  /** 叠在宿主环境之上的变量；值为 null 表示从子进程环境里删掉 */
+  env?: Record<string, string | null>;
+  /** exec 的超时；探测版本用默认的短超时，下载大包要放长 */
+  timeoutMs?: number;
 }
+
+export type Arch = 'arm64' | 'x64';
 
 export interface ChildProcess {
   pid: number;
@@ -51,6 +56,8 @@ export interface HostBridge {
   readonly canSpawn: boolean;
 
   platform(): Platform;
+  /** CPU 架构，挑内置运行时的构建用 */
+  arch(): Arch;
   spawn(cmd: string, args: string[], opts?: SpawnOptions): Promise<ChildProcess>;
   /** 一次性执行并收集输出，用于版本探测 */
   exec(cmd: string, args: string[], opts?: SpawnOptions): Promise<ExecResult>;
@@ -71,6 +78,12 @@ export interface HostBridge {
   listDir(path: string): Promise<DirEntry[]>;
   /** 文件的最后修改时间；不存在时返回 null */
   statFile(path: string): Promise<string | null>;
+  /** 文件字节数；不存在时返回 null。下载进度靠它 */
+  fileSize(path: string): Promise<number | null>;
+  /** 文件的 sha256，十六进制小写。校验下载的运行时包 */
+  sha256(path: string): Promise<string>;
+  /** 打开系统的文件选择器；做不到的宿主返回 null */
+  pickFile?(): Promise<string | null>;
   ensureDir(path: string): Promise<void>;
   removeFile(path: string): Promise<void>;
   /** 递归删除目录 */

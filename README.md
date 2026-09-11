@@ -153,7 +153,7 @@ pnpm desktop:build   # → src-tauri/target/release/bundle/macos/NoteX.app
 3. `PATH`
 4. sdkman / pyenv / conda / nvm / volta 等版本管理器的常见位置
 
-找不到对应环境时，运行按钮会提示当前平台的安装命令。
+找不到对应环境时，运行按钮会提示当前平台的安装命令，也可以在设置里一键下载内置运行时（装到 `~/.notex/runtimes`，启动时与本机环境隔离，不碰系统里的 Python 和 Java）。装了多个环境时，设置里会列出全部候选，用哪个由你选；换了选择要重启内核才生效，侧栏的圆点会提醒。
 
 ## 换个主题，继续写
 

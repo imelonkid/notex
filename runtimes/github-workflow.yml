@@ -1,0 +1,102 @@
+# 放到运行时仓库的 .github/workflows/build.yml。
+# 两台 macOS runner 各构建一种架构，汇总后生成清单并发布。
+name: build-runtimes
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag，同 tag 重发即覆盖'
+        default: 'v1'
+      publish:
+        description: '是否发布到 OSS 与码云'
+        type: boolean
+        default: false
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: macos-14   # Apple Silicon
+            arch: arm64
+          - os: macos-13   # Intel
+            arch: x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: 缓存上游下载
+        uses: actions/cache@v4
+        with:
+          path: .work/*.tar.gz
+          key: upstream-${{ matrix.arch }}-${{ hashFiles('build-*.sh', 'python-sci/requirements.txt') }}
+      - name: 构建 Python
+        run: ./build-python.sh
+      - name: 构建 Java
+        run: ./build-java.sh
+      - name: 构建 Node
+        run: ./build-node.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.arch }}
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  catalog:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: dist-*
+          path: dist
+          merge-multiple: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: 生成清单
+        env:
+          TAG: ${{ github.event.inputs.tag }}
+        run: |
+          node make-catalog.mjs --dist dist --out dist/catalog.json \
+            --base "https://${{ secrets.OSS_BUCKET }}.${{ secrets.OSS_ENDPOINT }}/${TAG}" \
+            --base "https://gitee.com/${{ secrets.GITEE_OWNER }}/${{ secrets.GITEE_REPO }}/releases/download/${TAG}" \
+            --base "https://github.com/${{ github.repository }}/releases/download/${TAG}"
+          cat dist/catalog.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: catalog
+          path: dist/catalog.json
+      - name: 发布到 GitHub Release
+        if: ${{ github.event.inputs.publish == 'true' }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag }}
+          files: |
+            dist/*.tar.gz
+            dist/catalog.json
+      - name: 发布到 OSS 与码云
+        if: ${{ github.event.inputs.publish == 'true' }}
+        env:
+          TAG: ${{ github.event.inputs.tag }}
+          OSS_PREFIX: ${{ github.event.inputs.tag }}
+          OSS_BUCKET: ${{ secrets.OSS_BUCKET }}
+          OSS_ENDPOINT: ${{ secrets.OSS_ENDPOINT }}
+          OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
+          OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
+          GITEE_OWNER: ${{ secrets.GITEE_OWNER }}
+          GITEE_REPO: ${{ secrets.GITEE_REPO }}
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+        run: |
+          curl -fsSL https://gosspublic.alicdn.com/ossutil/install.sh | sudo bash
+          ./publish.sh
+      - name: 把清单写回仓库
+        if: ${{ github.event.inputs.publish == 'true' }}
+        run: |
+          cp dist/catalog.json catalog.json
+          git config user.name github-actions
+          git config user.email actions@github.com
+          git add catalog.json
+          git commit -m "catalog: ${{ github.event.inputs.tag }}" || echo "清单没变"
+          git push

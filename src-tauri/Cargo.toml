@@ -21,6 +21,8 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # 删除笔记进系统废纸篓，而不是直接 unlink
 trash = "5"
+# 校验下载的运行时包
+sha2 = "0.10"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

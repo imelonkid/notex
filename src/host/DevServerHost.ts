@@ -1,5 +1,6 @@
 import { resolveDepsWithHost } from '@core/deps/resolve';
 import {
+  type Arch,
   type ChildProcess,
   type ExecResult,
   type HostBridge,
@@ -93,13 +94,15 @@ export class DevServerHost implements HostBridge {
   readonly id = 'dev-server';
   readonly canSpawn = true;
   private plat: Platform = 'darwin';
+  private cpu: Arch = 'arm64';
   private kernelsDir = '';
 
   static async probe(): Promise<DevServerHost | null> {
     try {
-      const info = await getJson<{ platform: string; kernels: string }>('/info');
+      const info = await getJson<{ platform: string; arch?: string; kernels: string }>('/info');
       const host = new DevServerHost();
       host.plat = (info.platform as Platform) ?? 'linux';
+      host.cpu = info.arch === 'x64' ? 'x64' : 'arm64';
       host.kernelsDir = info.kernels;
       return host;
     } catch {
@@ -111,6 +114,10 @@ export class DevServerHost implements HostBridge {
     return this.plat;
   }
 
+  arch(): Arch {
+    return this.cpu;
+  }
+
   async spawn(cmd: string, args: string[], opts?: SpawnOptions): Promise<ChildProcess> {
     const params = new URLSearchParams({
       cmd,
@@ -118,6 +125,7 @@ export class DevServerHost implements HostBridge {
       id: Math.random().toString(36).slice(2),
     });
     if (opts?.cwd) params.set('cwd', opts.cwd);
+    if (opts?.env) params.set('env', JSON.stringify(opts.env));
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const ws = new WebSocket(`${proto}//${location.host}${BASE}/kernel?${params}`);
     return await new Promise<ChildProcess>((resolve, reject) => {
@@ -134,8 +142,8 @@ export class DevServerHost implements HostBridge {
     });
   }
 
-  async exec(cmd: string, args: string[]): Promise<ExecResult> {
-    return await postJson<ExecResult>('/exec', { cmd, args });
+  async exec(cmd: string, args: string[], opts?: SpawnOptions): Promise<ExecResult> {
+    return await postJson<ExecResult>('/exec', { cmd, args, timeoutMs: opts?.timeoutMs });
   }
 
   async which(bin: string): Promise<string | null> {
@@ -184,6 +192,16 @@ export class DevServerHost implements HostBridge {
   async statFile(path: string): Promise<string | null> {
     const r = await getJson<{ modified: string | null }>(`/stat?path=${encodeURIComponent(path)}`);
     return r.modified;
+  }
+
+  async fileSize(path: string): Promise<number | null> {
+    const r = await getJson<{ modified: string | null; size: number }>(`/stat?path=${encodeURIComponent(path)}`);
+    return r.modified === null ? null : r.size;
+  }
+
+  async sha256(path: string): Promise<string> {
+    const r = await getJson<{ sha256: string }>(`/sha256?path=${encodeURIComponent(path)}`);
+    return r.sha256;
   }
 
   async ensureDir(path: string): Promise<void> {

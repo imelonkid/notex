@@ -1,0 +1,8 @@
+# Python 科学计算版内置运行时附带的包。版本钉死，换版本要改 BUILD_NO 重新发包。
+numpy==2.2.6
+pandas==2.3.2
+matplotlib==3.10.6
+pillow==11.3.0
+scipy==1.16.2
+# 补全：内核检测到 jedi 就用它，比 rlcompleter 准得多
+jedi==0.19.2

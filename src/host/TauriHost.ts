@@ -4,6 +4,7 @@ import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { open as openInSystem } from '@tauri-apps/plugin-shell';
 import { resolveDepsWithHost } from '@core/deps/resolve';
 import {
+  type Arch,
   type ChildProcess,
   type DirEntry,
   type ExecResult,
@@ -71,6 +72,7 @@ export class TauriHost implements HostBridge {
   readonly id = 'tauri';
   readonly canSpawn = true;
   private plat: Platform = 'darwin';
+  private cpu: Arch = 'arm64';
   private kernels = '';
 
   static isAvailable(): boolean {
@@ -81,6 +83,11 @@ export class TauriHost implements HostBridge {
     const host = new TauriHost();
     const ua = navigator.userAgent;
     host.plat = /Mac/i.test(ua) ? 'darwin' : /Win/i.test(ua) ? 'win32' : 'linux';
+    try {
+      host.cpu = (await invoke<string>('cpu_arch')) === 'x86_64' ? 'x64' : 'arm64';
+    } catch {
+      host.cpu = 'arm64';
+    }
     try {
       host.kernels = await invoke<string>('kernels_dir');
     } catch {
@@ -96,16 +103,35 @@ export class TauriHost implements HostBridge {
     return this.plat;
   }
 
+  arch(): Arch {
+    return this.cpu;
+  }
+
+  async fileSize(path: string): Promise<number | null> {
+    return (await invoke<number | null>('file_size', { path })) ?? null;
+  }
+
+  async sha256(path: string): Promise<string> {
+    return await invoke<string>('sha256_file', { path });
+  }
+
+  async pickFile(): Promise<string | null> {
+    const picked = await openDialog({ directory: false, multiple: false, title: '选择运行时压缩包' });
+    return typeof picked === 'string' ? picked : null;
+  }
+
   async spawn(cmd: string, args: string[], opts?: SpawnOptions): Promise<ChildProcess> {
     const id = await invoke<number>('kernel_spawn', {
       cmd,
       args,
       cwd: opts?.cwd || this.kernels || null,
+      env: opts?.env ?? null,
     });
     return new TauriChild(id);
   }
 
-  async exec(cmd: string, args: string[]): Promise<ExecResult> {
+  async exec(cmd: string, args: string[], _opts?: SpawnOptions): Promise<ExecResult> {
+    // Rust 侧的 exec 没有超时，长任务照常等
     return await invoke<ExecResult>('exec', { cmd, args });
   }
 

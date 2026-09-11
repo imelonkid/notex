@@ -1,4 +1,5 @@
 import {
+  type Arch,
   type ChildProcess,
   type ExecResult,
   type HostBridge,
@@ -20,8 +21,18 @@ export class BrowserHost implements HostBridge {
     return 'linux';
   }
 
+  arch(): Arch {
+    return 'arm64';
+  }
+
   async spawn(): Promise<ChildProcess> {
     throw new HostCapabilityError('启动本地进程');
+  }
+  async fileSize(): Promise<number | null> {
+    return null;
+  }
+  async sha256(): Promise<string> {
+    throw new HostCapabilityError('计算文件哈希');
   }
   async exec(): Promise<ExecResult> {
     throw new HostCapabilityError('执行本地命令');

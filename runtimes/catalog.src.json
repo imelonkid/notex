@@ -1,0 +1,29 @@
+{
+  "_comment": "运行时的元数据模板。version、size、sha256、builds 由 make-catalog.mjs 从 dist/ 里的包算出来，这里只写不随构建变化的部分。",
+  "runtimes": {
+    "python-sci": {
+      "lang": "python",
+      "label": "Python 科学计算版",
+      "entry": "bin/python3",
+      "protocol": 1,
+      "packages": ["numpy", "pandas", "matplotlib", "scipy", "pillow", "jedi"],
+      "notes": "基于 python-build-standalone，启动时与本机的 Python 环境隔离。装更多包用 python3 -m pip。"
+    },
+    "java-jdk": {
+      "lang": "java",
+      "label": "Java（Temurin JDK，jlink 裁剪）",
+      "entry": "bin/java",
+      "protocol": 1,
+      "packages": ["jdk.jshell", "java.desktop", "java.sql", "java.net.http"],
+      "notes": "只含 JShell 与常用标准库模块，比完整 JDK 小得多。"
+    },
+    "js-node": {
+      "lang": "js",
+      "label": "Node.js",
+      "entry": "bin/node",
+      "protocol": 1,
+      "packages": ["npm"],
+      "notes": "官方二进制重新打包，附带 npm。"
+    }
+  }
+}

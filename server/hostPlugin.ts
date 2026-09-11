@@ -7,7 +7,8 @@ import type { Plugin, ViteDevServer } from 'vite';
 import { spawn as nodeSpawn, execFile, type ChildProcess as NodeChild } from 'node:child_process';
 import { promisify } from 'node:util';
 import { readFile, writeFile, access, readdir, mkdir, stat, rm, rename } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { createReadStream, existsSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import os from 'node:os';
@@ -73,7 +74,7 @@ function isLocalRequest(req: import('node:http').IncomingMessage): boolean {
 /** 能作为内核进程启动的命令：只有三种语言的运行时本体 */
 const RUNTIME_BIN = /^(java|python3?(?:\.\d+)?|node)(?:\.exe)?$/i;
 /** exec 只用于探测版本、解析依赖，命令面同样收紧 */
-const EXEC_BIN = /^(java|python3?(?:\.\d+)?|node|mvn|curl)(?:\.exe|\.cmd|\.bat)?$/i;
+const EXEC_BIN = /^(java|python3?(?:\.\d+)?|node|mvn|curl|tar)(?:\.exe|\.cmd|\.bat)?$/i;
 
 function assertBinary(cmd: unknown, allowed: RegExp): string {
   if (typeof cmd !== 'string' || !cmd.trim()) throw new Error('缺少命令');
@@ -162,11 +163,23 @@ export function hostPlugin(): Plugin {
           const wanted = url.searchParams.get('cwd');
           const cwd = wanted && existsSync(wanted) ? wanted : KERNELS;
 
+          // 环境变量覆盖：内置运行时要隔离本机环境，null 表示删掉
+          const env: NodeJS.ProcessEnv = { ...process.env };
+          try {
+            const overrides = JSON.parse(url.searchParams.get('env') ?? '{}') as Record<string, string | null>;
+            for (const [k, v] of Object.entries(overrides)) {
+              if (v === null) delete env[k];
+              else if (typeof v === 'string') env[k] = v;
+            }
+          } catch {
+            /* 没有或写坏了就不覆盖 */
+          }
+
           let proc: NodeChild;
           try {
             proc = nodeSpawn(cmd, args, {
               cwd,
-              env: { ...process.env },
+              env,
               stdio: ['pipe', 'pipe', 'pipe'],
             });
           } catch (e) {
@@ -228,7 +241,15 @@ export function hostPlugin(): Plugin {
         }
         try {
           if (url.pathname === '/info') {
-            return json(res, 200, { platform: process.platform, kernels: KERNELS, home: os.homedir() });
+            return json(res, 200, { platform: process.platform, arch: process.arch, kernels: KERNELS, home: os.homedir() });
+          }
+          if (url.pathname === '/sha256') {
+            const p = url.searchParams.get('path') ?? '';
+            const hash = createHash('sha256');
+            await new Promise<void>((resolve, reject) => {
+              createReadStream(p).on('data', (d) => hash.update(d)).on('end', resolve).on('error', reject);
+            });
+            return json(res, 200, { sha256: hash.digest('hex') });
           }
           if (url.pathname === '/which') {
             const bin = url.searchParams.get('bin') ?? '';
@@ -249,10 +270,12 @@ export function hostPlugin(): Plugin {
             const cmd = assertBinary(body.cmd, EXEC_BIN);
             const args: unknown[] = Array.isArray(body.args) ? body.args : [];
             if (!args.every((a) => typeof a === 'string')) throw new Error('参数格式不正确');
+            // 默认 15 秒够探测版本；下载与解压运行时包要放长，上限一小时
+            const timeout = Math.min(Math.max(Number(body.timeoutMs) || 15000, 1000), 60 * 60 * 1000);
             try {
               const { stdout, stderr } = await execFileAsync(cmd, args as string[], {
-                timeout: 15000,
-                maxBuffer: 4 * 1024 * 1024,
+                timeout,
+                maxBuffer: 16 * 1024 * 1024,
               });
               return json(res, 200, { code: 0, stdout, stderr });
             } catch (e: any) {

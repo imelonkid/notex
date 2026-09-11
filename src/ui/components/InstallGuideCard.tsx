@@ -5,6 +5,7 @@ import { useRuntimes } from '../RuntimeContext';
 interface Props {
   lang: LangId;
   onRetryDetect(): void;
+  /** 打开设置的运行时页：装内置的、指定路径都在那里 */
   onOpenSettings(): void;
 }
 
@@ -62,11 +63,16 @@ export function InstallGuideCard({ lang, onRetryDetect, onOpenSettings }: Props)
       )}
 
       <div className="nx-install-actions">
-        <button className="nx-btn-primary" onClick={retry} disabled={detecting}>
+        {!launchFailed && (
+          <button className="nx-btn-primary" onClick={onOpenSettings}>
+            安装内置运行时…
+          </button>
+        )}
+        <button className={launchFailed ? 'nx-btn-primary' : 'nx-btn-ghost'} onClick={retry} disabled={detecting}>
           {detecting ? '检测中…' : '重新检测'}
         </button>
         <button className="nx-btn-ghost" onClick={onOpenSettings}>
-          手动指定路径…
+          选择或指定路径…
         </button>
         {guide.links.map((link) => (
           <a

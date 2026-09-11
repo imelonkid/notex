@@ -13,7 +13,72 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder};
+use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
+
+/// 窗口的固定尺寸。用户不能拖边框改大小，只能在这个尺寸和最大化之间切换
+const WINDOW_SIZE: (f64, f64) = (1280.0, 860.0);
+
+/// 在固定尺寸与铺满屏幕之间切换。
+/// 窗口设成不可缩放后，系统的最大化（macOS 的 zoom）会被禁用，
+/// 所以临时放开、做完再收回，最大化后的窗口同样是固定的。
+fn toggle_zoom(window: &WebviewWindow) {
+    let maximized = window.is_maximized().unwrap_or(false);
+    let _ = window.set_resizable(true);
+    if maximized {
+        let _ = window.unmaximize();
+        let _ = window.set_size(tauri::LogicalSize::new(WINDOW_SIZE.0, WINDOW_SIZE.1));
+        let _ = window.center();
+    } else {
+        let _ = window.maximize();
+    }
+    let _ = window.set_resizable(false);
+}
+
+/// 菜单栏。自己建而不用默认菜单，是为了在「窗口」里放一个真正能用的「缩放」：
+/// 默认菜单里的最大化对不可缩放窗口不起作用。编辑菜单必须保留，
+/// macOS 上 ⌘C / ⌘V / ⌘Z 这些快捷键就是靠它分发到输入框的。
+fn build_menu(app: &AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
+    let app_menu = SubmenuBuilder::new(app, "NoteX")
+        .about(None)
+        .separator()
+        .services()
+        .separator()
+        .hide()
+        .hide_others()
+        .show_all()
+        .separator()
+        .quit()
+        .build()?;
+    let edit = SubmenuBuilder::new(app, "编辑")
+        .undo()
+        .redo()
+        .separator()
+        .cut()
+        .copy()
+        .paste()
+        .select_all()
+        .build()?;
+    let zoom = MenuItemBuilder::with_id("window-zoom", "缩放")
+        .accelerator("CmdOrCtrl+Ctrl+Z")
+        .build(app)?;
+    let fullscreen = MenuItemBuilder::with_id("window-fullscreen", "进入 / 退出全屏")
+        .accelerator("CmdOrCtrl+Ctrl+F")
+        .build(app)?;
+    let window = SubmenuBuilder::new(app, "窗口")
+        .item(&PredefinedMenuItem::minimize(app, Some("最小化"))?)
+        .item(&zoom)
+        .item(&fullscreen)
+        .separator()
+        .item(&PredefinedMenuItem::close_window(app, Some("关闭窗口"))?)
+        .build()?;
+    MenuBuilder::new(app).items(&[&app_menu, &edit, &window]).build()
+}
+
+#[tauri::command]
+fn window_zoom(window: WebviewWindow) {
+    toggle_zoom(&window);
+}
 
 #[derive(Serialize, Clone)]
 pub struct DirEntry {
@@ -173,6 +238,30 @@ fn stat_file(path: String) -> Option<String> {
 }
 
 #[tauri::command]
+fn file_size(path: String) -> Option<u64> {
+    std::fs::metadata(&path).ok().map(|m| m.len())
+}
+
+#[tauri::command]
+fn cpu_arch() -> &'static str {
+    std::env::consts::ARCH
+}
+
+/// 下载的运行时包要校验后才能解压；一百多 MB 的文件放到线程池里算
+#[tauri::command]
+async fn sha256_file(path: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use sha2::{Digest, Sha256};
+        let mut file = std::fs::File::open(&path).map_err(|e| format!("{path}: {e}"))?;
+        let mut hasher = Sha256::new();
+        std::io::copy(&mut file, &mut hasher).map_err(|e| e.to_string())?;
+        Ok(format!("{:x}", hasher.finalize()))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
 fn list_dir(path: String) -> Result<Vec<DirEntry>, String> {
     let mut out = Vec::new();
     let entries = match std::fs::read_dir(&path) {
@@ -308,6 +397,7 @@ fn kernel_spawn(
     cmd: String,
     args: Vec<String>,
     cwd: Option<String>,
+    env: Option<HashMap<String, Option<String>>>,
 ) -> Result<u64, String> {
     let mut command = Command::new(&cmd);
     command
@@ -317,6 +407,17 @@ fn kernel_spawn(
         .stderr(Stdio::piped());
     if let Some(dir) = cwd {
         command.current_dir(dir);
+    }
+    // 环境变量覆盖：内置运行时要隔离本机环境，None 表示删掉
+    for (key, value) in env.unwrap_or_default() {
+        match value {
+            Some(v) => {
+                command.env(key, v);
+            }
+            None => {
+                command.env_remove(key);
+            }
+        }
     }
 
     let mut child = command.spawn().map_err(|e| format!("{cmd}: {e}"))?;
@@ -422,12 +523,32 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(Kernels::default())
+        .setup(|app| {
+            let menu = build_menu(app.handle())?;
+            app.set_menu(menu)?;
+            app.on_menu_event(|app, event| {
+                let Some(window) = app.get_webview_window("main") else { return };
+                match event.id().as_ref() {
+                    "window-zoom" => toggle_zoom(&window),
+                    "window-fullscreen" => {
+                        let full = window.is_fullscreen().unwrap_or(false);
+                        let _ = window.set_fullscreen(!full);
+                    }
+                    _ => {}
+                }
+            });
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
+            window_zoom,
             home_dir,
             read_text,
             write_text,
             file_exists,
             stat_file,
+            file_size,
+            cpu_arch,
+            sha256_file,
             list_dir,
             ensure_dir,
             remove_file,

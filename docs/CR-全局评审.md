@@ -321,3 +321,18 @@ core 的纯函数测试扎实，但本次发现的高危问题全在没有测试
 | 1.6 改名改写引用 | `rewriteNoteLinks` 改写 `[[…]]` 与 `[…](…)`，跳过围栏与行内代码，沿用原来的编码写法；`nextLinkTarget` 决定新写法（按名字的仍按名字，重名才写路径，`.md` 保留）。App 在改名、移动、标题栏改名三条路径上先取反链再改，当前笔记走模型、其它直接改文件并即时更新索引 | `test:links` 新增 5 项；浏览器实测：改名后另一篇里的 2 处链接被改写，行内代码里的不动，提示条报数 |
 
 其余低级别条目（调试日志、`updated:` 噪音、ipynb 等）未动。
+
+### 同日第三轮：界面与运行时
+
+| 内容 | 做法 | 验证 |
+|---|---|---|
+| 侧栏底部重排 | 三颗常驻的运行时圆点（点开有中断 / 重启 / 停止 / 启动 / 重新检测）；笔记库只显示目录名，齿轮进设置；修掉 RTL 截断把斜杠挪到末尾的 bug | 浏览器实测启动、停止、菜单 |
+| 设置弹窗 | 三个分页（笔记库 / 外观 / 运行时）；所有改动进草稿，保存才生效，取消丢弃；标题栏可拖动；Esc 关闭 | 浏览器实测：选深色未保存不变、保存后变、取消不变；拖动 120px |
+| 窗口固定尺寸 | `resizable: false`，自建菜单栏，「窗口 › 缩放 ⌃⌘Z」临时放开可缩放做系统最大化再收回 | 仅编译通过，需在桌面版手动确认 |
+| 运行时候选与显式选择 | `discover` 探测所有候选（内置 / 环境变量 / PATH / 版本管理器 / Homebrew / 系统 / 手动），不存在的猜测路径不列，不可用的列出原因；选择存 `~/.notex/config.json`；「自动」优先内置；选中的不可用时明确报错不偷偷换；内核活着时改选只标记「重启后生效」 | 浏览器实测：候选列表、改选写入 config、重启标记出现与消失 |
+| 内置运行时隔离启动 | `~/.notex/runtimes` 下的运行时启动时清掉 PYTHON* / conda / JAVA_TOOL_OPTIONS / NODE_OPTIONS 等变量，Python 加 `-I`，matplotlib 缓存指到 `~/.notex/cache`；两个宿主都支持按键删除环境变量 | `test:isolation` 6 项；用假的内置 Python 实测 `sys.flags.isolated == 1`、`CONDA_PREFIX` 被清、`MPLCONFIGDIR` 生效 |
+| 内置运行时的清单与安装 | `catalog.json` 契约（id / lang / version / protocol / entry / builds[platform, arch, size, sha256, urls]），解析时校验 id、version、entry 的格式，坏条目整条丢；`installer.ts` 用本机 curl 依次试各地址、`-C -` 续传、按文件大小轮询进度、sha256 校验后才解压、先解到 `.partial` 再改名；顶层多套一层目录自动剥掉；清单地址可在 config.json 的 `runtimeCatalog` 换成镜像。设置里每种语言下多一栏「内置运行时」：下载并安装、从文件安装、卸载，装完自动重探；缺运行时的引导卡多了「安装内置运行时…」直达 | `test:catalog` 8 项；本地起 CORS 服务放假清单与假包实测：第一个地址 404 自动换第二个、校验通过、剥层解压、候选里出现「内置」且「自动」选中它、卸载后回到本机 |
+
+**构建与发布流水线**（`runtimes/`）：`build-python.sh`（python-build-standalone 加钉死版本的科学计算包，隔离模式自检并用 Agg 画图）、`build-java.sh`（Temurin 用 jlink 裁到 JShell 所需模块，源码启动器自检 JShell 与 AWT）、`build-node.sh`（官方二进制去文档，npmmirror 下载）、`make-catalog.mjs`（从包名与哈希生成清单，多个 `--base` 决定下载顺序，`--merge` 保留其它平台）、`publish.sh`（阿里云 OSS 用 ossutil、码云 Release 走 API，同名附件先删后传）、`github-workflow.yml`（两台 macOS runner 各出一种架构，汇总生成清单，勾选后发布）。本机实测：三个包都构建成功并通过自检（Node 31 MB、JDK 46 MB、Python 缩减包 25 MB），清单生成正确，JDK 包通过应用安装后 Java 内核在内置 JDK 上跑通。
+
+**还没有的**：清单仓库、OSS 桶与码云仓库本身（需要账号）、把 `DEFAULT_CATALOG_URL` 指向正式地址。

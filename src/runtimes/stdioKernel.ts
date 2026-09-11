@@ -1,7 +1,7 @@
 import type { HostBridge } from '@host/HostBridge';
 import { createLineSplitter, decodeLine } from '@core/runtime/protocol';
 import type { KernelResponse } from '@core/runtime/protocol';
-import type { KernelConnection } from '@core/runtime/types';
+import type { KernelConnection, RuntimeCandidate } from '@core/runtime/types';
 
 /**
  * 把一个本地子进程包装成 KernelConnection。
@@ -89,30 +89,40 @@ async function probe(
   return { path: candidate, version };
 }
 
+export interface RawCandidate {
+  path: string;
+  source: string;
+}
+
 /**
- * 依次尝试候选可执行文件。
- * 用户手动指定的路径若不可用，直接报错而不是静默换一个，
- * 否则用户会困惑为什么设置没生效。
+ * 逐个验证候选，全部列出来而不是命中即停：用户要看到有哪些、为什么不可用。
+ * 同一路径出现多次只算一次，保留先出现的来源。
+ * validate 是语言自己的额外检查（比如 Java 必须是 JDK），返回不可用的原因。
  */
-export async function firstWorking(
+export async function probeAll(
   host: HostBridge,
-  candidates: (string | null | undefined)[],
+  candidates: (RawCandidate | null | undefined)[],
   versionArgs: string[],
   minVersion: string,
-  manualPath?: string | null,
-): Promise<{ path: string; version: string } | null> {
-  if (manualPath) {
-    const result = await probe(host, manualPath, versionArgs, minVersion);
-    if ('path' in result) return result;
-    throw new Error(`手动指定的路径不可用（${manualPath}）：${result.reason}`);
-  }
-
+  validate?: (path: string) => Promise<string | null>,
+): Promise<RuntimeCandidate[]> {
+  const out: RuntimeCandidate[] = [];
   const seen = new Set<string>();
-  for (const candidate of candidates) {
-    if (!candidate || seen.has(candidate)) continue;
-    seen.add(candidate);
-    const result = await probe(host, candidate, versionArgs, minVersion);
-    if ('path' in result) return result;
+  for (const c of candidates) {
+    if (!c?.path || seen.has(c.path)) continue;
+    seen.add(c.path);
+    // 猜出来的常见位置多半不存在，不存在的不列；用户手动添加的要列出来并说明
+    if (!(await host.fileExists(c.path).catch(() => false))) {
+      if (c.source === '手动') out.push({ path: c.path, source: c.source, ok: false, reason: '文件不存在' });
+      continue;
+    }
+    const result = await probe(host, c.path, versionArgs, minVersion);
+    if ('reason' in result) {
+      out.push({ path: c.path, source: c.source, ok: false, reason: result.reason });
+      continue;
+    }
+    const reason = validate ? await validate(c.path) : null;
+    out.push({ path: c.path, source: c.source, version: result.version, ok: !reason, reason: reason ?? undefined });
   }
-  return null;
+  return out;
 }

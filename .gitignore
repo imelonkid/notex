@@ -3,3 +3,7 @@ dist
 .DS_Store
 src-tauri/target
 src-tauri/gen
+
+# 运行时包的构建产物与上游缓存
+runtimes/dist
+runtimes/.work

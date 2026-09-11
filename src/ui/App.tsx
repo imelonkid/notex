@@ -6,6 +6,8 @@ import { exportIpynb, exportMarkdown, importNotebook } from '@core/files';
 import { parseDeps } from '@core/deps';
 import { nextLinkTarget, resolveNoteLink, rewriteNoteLinks } from '@core/links';
 import { SearchPalette } from './components/SearchPalette';
+import { RuntimeStrip, STATUS_WORD } from './components/RuntimeStrip';
+import { FolderIcon, GearIcon } from './components/icons';
 import { MAX_DIR_DEPTH, baseOf, depthOf, dirOf, joinId } from '@core/store/paths';
 import type { StoreSetup } from '@core/store/index';
 import { Cell } from './components/Cell';
@@ -19,7 +21,7 @@ import { SidebarToggle } from './components/SidebarToggle';
 import { Breadcrumb } from './components/Breadcrumb';
 import { FolderPage } from './components/FolderPage';
 import { useLinkIndex } from './useLinkIndex';
-import { SettingsModal } from './components/SettingsModal';
+import { SettingsModal, type SettingsTab } from './components/SettingsModal';
 import { useRuntimes } from './RuntimeContext';
 import { scrollToHeadingText, useLinkInterceptor } from './useLinkInterceptor';
 import { newCodeCell, newMarkdownCell, ops, useNotebook } from './useNotebook';
@@ -39,7 +41,10 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
   const [runMarks, setRunMarks] = useState<Record<string, RunRecord>>({});
   const [dragId, setDragId] = useState<string | null>(null);
   const [dropId, setDropId] = useState<string | null>(null);
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  /** 设置弹窗：null 关着，否则是打开时落到的分页 */
+  const [settingsTab, setSettingsTab] = useState<SettingsTab | null>(null);
+  const settingsOpen = settingsTab !== null;
+  const setSettingsOpen = (open: boolean, tab: SettingsTab = 'vault') => setSettingsTab(open ? tab : null);
   const [depsStatus, setDepsStatus] = useState<Record<string, string>>({});
   const [refreshing, setRefreshing] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(() => {
@@ -692,24 +697,56 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
   const anyRunning = Object.keys(runningIds).length > 0;
   void revision;
 
-  const storeLabel = setup.store.kind === 'vault' ? setup.vaultPath : '浏览器本地存储';
+  /** 侧栏底部的笔记库名：只要目录名，完整路径放 tooltip */
+  const vaultName =
+    setup.store.kind === 'vault' ? baseOf(setup.vaultPath.replace(/[/\\]+$/, '')) || setup.vaultPath : '浏览器存储';
+  const vaultTip =
+    setup.store.kind === 'vault'
+      ? `笔记库：${setup.vaultPath}\n点击打开笔记库`
+      : `当前存在浏览器里，无法落盘${setup.fallbackReason ? `：${setup.fallbackReason}` : ''}`;
 
-  /**
-   * 侧栏底部列哪些运行时。
-   *
-   * 三行常驻是在回答"哪些装了、哪些没装"——那是首次使用才关心的问题。
-   * 平时只需要当前这篇用到的语言。所以：有任何一个没就绪就全列出来
-   * （装没装是要紧事），都正常则只显示这篇笔记实际用到的。
-   */
-  const visibleRuntimes = (() => {
-    const anyTrouble = LANGS.some((l) => {
-      const st = registry.get(l.id).status;
-      return st === 'missing' || st === 'error' || st === 'unknown';
-    });
-    if (anyTrouble) return LANGS;
-    const used = new Set((nb?.cells ?? []).filter(isCode).map((c) => c.lang));
-    return used.size ? LANGS.filter((l) => used.has(l.id)) : LANGS;
-  })();
+  /** 点侧栏底部某个运行时：直接给动作，不必进设置 */
+  const openRuntimeMenu = (lang: LangId, x: number, y: number) => {
+    const s = registry.get(lang);
+    const label = LANGS.find((l) => l.id === lang)?.label ?? lang;
+    const alive = !!s.session?.alive;
+    const items: MenuItem[] = [
+      {
+        label: `${label}${s.info?.version ? ` ${s.info.version}` : ''} · ${STATUS_WORD[s.status]}`,
+        disabled: true,
+      },
+    ];
+    if (s.status === 'busy') {
+      items.push({ label: '中断当前执行', separatorBefore: true, onSelect: () => void s.session?.interrupt() });
+    }
+    if (alive) {
+      items.push({
+        label: s.restartNeeded ? '重启内核以应用新设置' : '重启内核',
+        separatorBefore: s.status !== 'busy',
+        onSelect: () => {
+          debug.log('runtime', '从侧栏重启内核', { lang });
+          void registry.restart(lang);
+        },
+      });
+      items.push({
+        label: '停止内核',
+        onSelect: () => {
+          debug.log('runtime', '从侧栏停止内核', { lang });
+          void registry.stop(lang);
+        },
+      });
+    } else if (s.status === 'available') {
+      items.push({ label: '启动内核', separatorBefore: true, onSelect: () => void registry.ensure(lang) });
+    } else if (s.status === 'missing' || s.status === 'error' || s.status === 'unknown') {
+      items.push({
+        label: '重新检测',
+        separatorBefore: true,
+        onSelect: () => void registry.detect(lang, true),
+      });
+    }
+    items.push({ label: '设置…', separatorBefore: true, onSelect: () => setSettingsOpen(true, 'runtime') });
+    setMenu({ x, y, items, align: 'left', placement: 'above' });
+  };
 
   /**
    * 保存状态。自动保存的应用最需要的确认恰恰是"存住了"，
@@ -943,47 +980,23 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
         </div>
 
 
-        <div className="nx-runtime-panel">
-          <button
-            className="nx-vault-row"
-            title={setup.store.kind === 'vault' ? `笔记库：${setup.vaultPath}` : '当前存在浏览器里'}
-            onClick={() => setSettingsOpen(true)}
-          >
-            <span className="nx-dot" data-status={setup.store.kind === 'vault' ? 'ready' : 'missing'} />
-            <span className="nx-vault-path">{storeLabel}</span>
-          </button>
-
-          {visibleRuntimes.map((l) => {
-            const state = registry.get(l.id);
-            const label =
-              state.status === 'ready' || state.status === 'busy'
-                ? `就绪 ${state.info?.version ?? ''}`
-                : state.status === 'starting'
-                  ? '启动中…'
-                  : state.status === 'detecting'
-                    ? '检测中…'
-                    : state.status === 'available'
-                      ? `已安装 ${state.info?.version ?? ''}`
-                      : state.status === 'missing'
-                        ? '未安装'
-                        : state.status === 'error'
-                          ? '启动失败'
-                          : '未检测';
-            return (
-              <button key={l.id} className="nx-runtime-row" onClick={() => setSettingsOpen(true)}>
-                <span className="nx-dot" data-status={state.status} />
-                <span style={{ flex: 1 }}>{l.label}</span>
-                <span style={{ color: 'var(--nx-fg-faint)' }}>{label}</span>
-              </button>
-            );
-          })}
-          <button
-            className="nx-btn-mini"
-            style={{ alignSelf: 'flex-start', marginTop: 2, marginLeft: -8 }}
-            onClick={() => setSettingsOpen(true)}
-          >
-            设置…
-          </button>
+        <div className="nx-sidebar-foot">
+          <RuntimeStrip onMenu={openRuntimeMenu} />
+          <div className="nx-vault-line">
+            <button
+              className="nx-vault-name"
+              data-kind={setup.store.kind}
+              title={vaultTip}
+              onClick={() => (setup.store.kind === 'vault' ? void openFolder('') : setSettingsOpen(true))}
+            >
+              <FolderIcon size={14} />
+              <span>{vaultName}</span>
+            </button>
+            <span style={{ flex: 1 }} />
+            <button className="nx-icon-btn" title="设置" aria-label="打开设置" onClick={() => setSettingsOpen(true)}>
+              <GearIcon />
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -1231,7 +1244,7 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
                       return next;
                     });
                   }}
-                  onOpenSettings={() => setSettingsOpen(true)}
+                  onOpenSettings={() => setSettingsOpen(true, 'runtime')}
                 />
                 </CellBoundary>
                 </div>
@@ -1291,6 +1304,7 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
       {settingsOpen && (
         <SettingsModal
           setup={setup}
+          initialTab={settingsTab ?? undefined}
           onVaultChanged={onVaultChanged}
           onClose={() => setSettingsOpen(false)}
         />

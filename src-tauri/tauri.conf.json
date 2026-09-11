@@ -15,11 +15,13 @@
         "title": "NoteX",
         "width": 1280,
         "height": 860,
-        "minWidth": 760,
-        "minHeight": 520,
+        "center": true,
         "titleBarStyle": "Transparent",
         "hiddenTitle": true,
-        "resizable": true,
+        "resizable": false,
+        "minimizable": true,
+        "maximizable": true,
+        "closable": true,
         "dragDropEnabled": false
       }
     ],

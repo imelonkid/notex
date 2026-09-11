@@ -1,4 +1,11 @@
-import { DEFAULT_FONT_SIZES, FONT_SIZE_LIMITS, type Appearance, type FontSizes, type Theme } from '@core/theme';
+import {
+  DEFAULT_FONT_SIZES,
+  FONT_SIZE_LIMITS,
+  type Appearance,
+  type FontSizes,
+  type Theme,
+  type ThemeSelection,
+} from '@core/theme';
 import { useTheme } from '../theme/ThemeProvider';
 
 const SIZE_LABEL: Record<keyof FontSizes, string> = { ui: '界面', prose: '正文', code: '代码' };
@@ -22,18 +29,26 @@ function ThemeSelect({ value, themes, onChange }: { value: string; themes: Theme
   );
 }
 
+interface Props {
+  /** 草稿，由设置弹窗持有；点「保存」才写进 ThemeProvider */
+  selection: ThemeSelection;
+  fontSizes: FontSizes;
+  onSelection(next: ThemeSelection): void;
+  onFontSizes(next: FontSizes): void;
+}
+
 /**
  * 设置里的「主题」与「字号」。
  * 主题只管颜色、字体、字重和标题比例；字号是用户偏好，换主题不会改变它。
+ * 这里只改草稿，不直接改生效值——改了没保存就关掉，什么都不该变。
  */
-export function ThemeSettings() {
+export function ThemeSettings({ selection: sel, fontSizes, onSelection, onFontSizes }: Props) {
   const t = useTheme();
-  const sel = t.selection;
   const byAppearance = (a: Appearance) => t.themes.filter((x) => x.appearance === a);
 
   const toSystem = () => {
     const cur = t.active;
-    t.setSelection({
+    onSelection({
       mode: 'system',
       light: cur.appearance === 'light' ? cur.id : 'light',
       dark: cur.appearance === 'dark' ? cur.id : 'dark',
@@ -42,12 +57,12 @@ export function ThemeSettings() {
 
   const step = (k: keyof FontSizes, dir: 1 | -1) => {
     const lim = FONT_SIZE_LIMITS[k];
-    const next = Math.min(lim.max, Math.max(lim.min, t.fontSizes[k] + dir * lim.step));
-    t.setFontSizes({ ...t.fontSizes, [k]: Number(next.toFixed(2)) });
+    const next = Math.min(lim.max, Math.max(lim.min, fontSizes[k] + dir * lim.step));
+    onFontSizes({ ...fontSizes, [k]: Number(next.toFixed(2)) });
   };
 
   const sizeKeys = Object.keys(SIZE_LABEL) as (keyof FontSizes)[];
-  const sizesAreDefault = sizeKeys.every((k) => t.fontSizes[k] === DEFAULT_FONT_SIZES[k]);
+  const sizesAreDefault = sizeKeys.every((k) => fontSizes[k] === DEFAULT_FONT_SIZES[k]);
 
   return (
     <>
@@ -59,7 +74,7 @@ export function ThemeSettings() {
           </button>
           <button
             data-active={sel.mode === 'fixed'}
-            onClick={() => sel.mode !== 'fixed' && t.setSelection({ mode: 'fixed', theme: t.active.id })}
+            onClick={() => sel.mode !== 'fixed' && onSelection({ mode: 'fixed', theme: t.active.id })}
           >
             固定一个
           </button>
@@ -72,7 +87,7 @@ export function ThemeSettings() {
               <ThemeSelect
                 value={sel.light}
                 themes={byAppearance('light')}
-                onChange={(id) => t.setSelection({ ...sel, light: id })}
+                onChange={(id) => onSelection({ ...sel, light: id })}
               />
             </label>
             <label className="nx-theme-row">
@@ -80,19 +95,19 @@ export function ThemeSettings() {
               <ThemeSelect
                 value={sel.dark}
                 themes={byAppearance('dark')}
-                onChange={(id) => t.setSelection({ ...sel, dark: id })}
+                onChange={(id) => onSelection({ ...sel, dark: id })}
               />
             </label>
           </>
         ) : (
           <label className="nx-theme-row">
             <span>使用</span>
-            <ThemeSelect value={sel.theme} themes={t.themes} onChange={(id) => t.setSelection({ mode: 'fixed', theme: id })} />
+            <ThemeSelect value={sel.theme} themes={t.themes} onChange={(id) => onSelection({ mode: 'fixed', theme: id })} />
           </label>
         )}
 
         <div className="nx-install-note">
-          自定义主题放在 <code>~/.notex/themes</code>，改完切回应用即生效。主题只能改颜色、字体、字重和标题比例，写法见项目里的{' '}
+          自定义主题放在 <code>~/.notex/themes</code>，改完切回应用即可选到。主题只能改颜色、字体、字重和标题比例，写法见项目里的{' '}
           <code>docs/THEME.md</code>。
         </div>
 
@@ -114,7 +129,7 @@ export function ThemeSettings() {
         <div className="nx-field-label">字号</div>
         {sizeKeys.map((k) => {
           const lim = FONT_SIZE_LIMITS[k];
-          const v = t.fontSizes[k];
+          const v = fontSizes[k];
           return (
             <div key={k} className="nx-theme-row">
               <span>{SIZE_LABEL[k]}</span>
@@ -132,7 +147,7 @@ export function ThemeSettings() {
         })}
         <div className="nx-theme-row">
           <span />
-          <button className="nx-btn-mini" disabled={sizesAreDefault} onClick={() => t.setFontSizes(DEFAULT_FONT_SIZES)}>
+          <button className="nx-btn-mini" disabled={sizesAreDefault} onClick={() => onFontSizes(DEFAULT_FONT_SIZES)}>
             恢复默认
           </button>
         </div>
