@@ -1,0 +1,150 @@
+name: build-runtimes
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release 标签；第一次保持 v1
+        default: v1
+        required: true
+        type: string
+      publish:
+        description: 发布到 GitHub Release，并在已配置时同步 OSS 与码云
+        default: false
+        required: true
+        type: boolean
+
+jobs:
+  build:
+    name: build (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-14
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: runtimes
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 缓存上游运行时下载
+        uses: actions/cache@v4
+        with:
+          path: runtimes/.work/*.tar.gz
+          key: runtimes-${{ matrix.arch }}-${{ hashFiles('runtimes/build-*.sh', 'runtimes/lib.sh', 'runtimes/python-sci/requirements.txt') }}
+
+      - name: 构建完整 Python 科学计算环境
+        run: ./build-python.sh
+
+      - name: 构建 Java 运行时
+        run: ./build-java.sh
+
+      - name: 构建 Node.js 运行时
+        run: ./build-node.sh
+
+      - name: 上传当前架构的构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtimes-${{ matrix.arch }}
+          path: runtimes/dist/*.tar.gz
+          if-no-files-found: error
+          retention-days: 7
+
+  catalog:
+    name: catalog and publish
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    defaults:
+      run:
+        working-directory: runtimes
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 下载两种架构的构建产物
+        uses: actions/download-artifact@v4
+        with:
+          pattern: runtimes-*
+          path: runtimes/dist
+          merge-multiple: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: 生成运行时清单
+        env:
+          TAG: ${{ inputs.tag }}
+          OSS_BUCKET: ${{ secrets.OSS_BUCKET }}
+          OSS_ENDPOINT: ${{ secrets.OSS_ENDPOINT }}
+          GITEE_OWNER: ${{ secrets.GITEE_OWNER }}
+          GITEE_REPO: ${{ secrets.GITEE_REPO }}
+        run: |
+          args=(--dist dist --out dist/catalog.json)
+          if [[ -n "$OSS_BUCKET" && -n "$OSS_ENDPOINT" ]]; then
+            args+=(--base "https://${OSS_BUCKET}.${OSS_ENDPOINT}/${TAG}")
+          fi
+          if [[ -n "$GITEE_OWNER" && -n "$GITEE_REPO" ]]; then
+            args+=(--base "https://gitee.com/${GITEE_OWNER}/${GITEE_REPO}/releases/download/${TAG}")
+          fi
+          args+=(--base "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}")
+          node make-catalog.mjs "${args[@]}"
+          cat dist/catalog.json
+
+      - name: 上传清单供手动检查
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-catalog
+          path: runtimes/dist/catalog.json
+          retention-days: 7
+
+      - name: 发布到 GitHub Release
+        if: ${{ inputs.publish }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag }}
+          files: |
+            runtimes/dist/*.tar.gz
+            runtimes/dist/catalog.json
+
+      - name: 同步到 OSS 与码云
+        if: ${{ inputs.publish }}
+        env:
+          TAG: ${{ inputs.tag }}
+          OSS_PREFIX: ${{ inputs.tag }}
+          OSS_BUCKET: ${{ secrets.OSS_BUCKET }}
+          OSS_ENDPOINT: ${{ secrets.OSS_ENDPOINT }}
+          OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
+          OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
+          GITEE_OWNER: ${{ secrets.GITEE_OWNER }}
+          GITEE_REPO: ${{ secrets.GITEE_REPO }}
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+        run: |
+          if [[ -n "$OSS_BUCKET" ]]; then
+            curl -fsSL https://gosspublic.alicdn.com/ossutil/install.sh | sudo bash
+          fi
+          ./publish.sh
+
+      - name: 把正式清单写回仓库
+        if: ${{ inputs.publish }}
+        run: |
+          cp dist/catalog.json catalog.json
+          git config user.name github-actions
+          git config user.email actions@github.com
+          git add catalog.json
+          if git diff --cached --quiet; then
+            echo "清单没有变化"
+          else
+            git commit -m "catalog: ${{ inputs.tag }}"
+            git push
+          fi

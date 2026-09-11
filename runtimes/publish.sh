@@ -56,6 +56,13 @@ if [[ -n "${GITEE_TOKEN:-}" ]]; then
   EXISTING="$(curl -fsS "$API/$RELEASE_ID/attach_files?access_token=$GITEE_TOKEN&per_page=100")"
   for f in "$DIST"/*.tar.gz "$DIST"/catalog.json; do
     name="$(basename "$f")"
+    # 码云免费版单附件上限 100 MB。完整科学计算环境可能超过这个值，
+    # 此时保留清单里的码云候选地址供客户端自动回退，但不让整个发布任务失败。
+    size="$(wc -c < "$f" | tr -d ' ')"
+    if (( size > 100 * 1024 * 1024 )); then
+      log "  - 跳过 $name（超过码云 100 MB 附件上限）"
+      continue
+    fi
     old_id="$(echo "$EXISTING" | tr '{' '\n' | grep "\"name\":\"$name\"" | sed -n 's/.*"id":\([0-9]*\).*/\1/p' | head -1 || true)"
     if [[ -n "$old_id" ]]; then
       curl -fsS -X DELETE "$API/$RELEASE_ID/attach_files/$old_id?access_token=$GITEE_TOKEN" >/dev/null

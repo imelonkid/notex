@@ -60,11 +60,11 @@ TAG=v1 ./publish.sh
 
 ### GitHub Actions
 
-`github-workflow.yml` 复制到仓库的 `.github/workflows/build.yml`。手动触发，两台 macOS runner 各出一种架构，汇总后生成清单；勾上 `publish` 才会真的发。要在仓库 Secrets 里填上面那些变量。
+当前 NoteX 仓库已经使用 `.github/workflows/build-runtimes.yml`。手动触发后，两台 macOS runner 各出一种架构，汇总后生成清单；勾上 `publish` 才会真的发布。`github-workflow.yml` 保留为将 `runtimes/` 整体搬到独立仓库时使用的模板。要同步 OSS 或码云时，在仓库 Secrets 里填写上面的对应变量；不填则只使用 GitHub Release。
 
 ## 应用侧怎么接
 
-应用默认从 `DEFAULT_CATALOG_URL`（`src/core/runtime/catalog.ts`）取清单；清单发到 OSS 后把它改成 `https://<bucket>.<endpoint>/v1/catalog.json`。
+应用默认从 `DEFAULT_CATALOG_URL`（`src/core/runtime/catalog.ts`）读取本仓库 `master` 分支下的 `runtimes/catalog.json`；工作流正式发布后会自动写回该文件。
 用户也可以在 `~/.notex/config.json` 里写 `runtimeCatalog` 换源。
 
 安装后的目录是 `~/.notex/runtimes/<id>/<version>/`，应用把它当普通候选运行时对待，并在启动时隔离本机环境。
