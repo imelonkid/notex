@@ -1,8 +1,10 @@
 {
+  "$schema": "../docs/theme.schema.json",
+  "notex-theme": 1,
   "id": "solarized",
   "name": "Solarized Light",
   "appearance": "light",
-  "tokens": {
+  "colors": {
     "bg": "#fdf6e3",
     "bg-subtle": "#f5eed8",
     "bg-hover": "#eee8d5",
@@ -29,6 +31,9 @@
     "editor-selection": "#dfd8c0"
   },
   "fonts": {
-    "heading": "'Iowan Old Style', Georgia, serif"
+    "title": "'Iowan Old Style', Georgia, serif"
+  },
+  "typography": {
+    "title-weight": 600
   }
 }

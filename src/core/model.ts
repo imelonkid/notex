@@ -90,10 +90,26 @@ export type RunMark = 'ok' | 'error' | 'aborted';
 
 export type CellStatus = 'idle' | 'running' | RunMark;
 
-export function cellStatus(cell: Cell, running: boolean, mark?: RunMark): CellStatus {
+/** 一次执行留下的记录：结果、耗时、发生时间 */
+export interface RunRecord {
+  status: RunMark;
+  /** 毫秒。界面上要告诉用户"跑了多久"，不能只画一个对号 */
+  ms?: number;
+  at: number;
+}
+
+export function cellStatus(cell: Cell, running: boolean, mark?: RunRecord): CellStatus {
   if (running) return 'running';
   if (cell.type !== 'code') return 'idle';
-  return mark ?? 'idle';
+  return mark?.status ?? 'idle';
+}
+
+/** 耗时的人话写法：毫秒级别不必显示三位小数 */
+export function formatDuration(ms: number): string {
+  if (ms < 1000) return `${ms} ms`;
+  if (ms < 60_000) return `${(ms / 1000).toFixed(2)} s`;
+  const m = Math.floor(ms / 60_000);
+  return `${m} min ${Math.round((ms % 60_000) / 1000)} s`;
 }
 
 /** 装订线上的标记：括号里画的是这个 cell 在本次会话里发生了什么 */

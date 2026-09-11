@@ -16,6 +16,11 @@ export interface MenuState {
   x: number;
   y: number;
   items: MenuItem[];
+  /**
+   * 'right' 表示 x 是右边缘。从右上角那个 ⋯ 按钮弹出时用它对齐，
+   * 否则菜单永远向右溢出、只能被贴边夹住，看着像是没对齐。
+   */
+  align?: 'left' | 'right';
 }
 
 /** 贴着鼠标弹出的菜单，点别处或按 Esc 关闭 */
@@ -29,11 +34,12 @@ export function ContextMenu({ state, onClose }: { state: MenuState; onClose(): v
     if (!el) return;
     const { width, height } = el.getBoundingClientRect();
     const margin = 8;
+    const wanted = state.align === 'right' ? state.x - width : state.x;
     setPos({
-      left: Math.min(state.x, window.innerWidth - width - margin),
+      left: Math.max(margin, Math.min(wanted, window.innerWidth - width - margin)),
       top: Math.min(state.y, window.innerHeight - height - margin),
     });
-  }, [state.x, state.y, state.items]);
+  }, [state.x, state.y, state.align, state.items]);
 
   useEffect(() => {
     const onDown = (e: MouseEvent) => {

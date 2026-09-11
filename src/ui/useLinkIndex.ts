@@ -76,5 +76,12 @@ export function useLinkIndex(store: NotebookStore | null, refs: NotebookRef[]) {
     [revision],
   );
 
-  return { ready, revision, backlinksOf, isBroken, touch, index: index.current };
+  /** 列表页的摘要与语言；索引在后台建，没建到的笔记先返回 undefined */
+  const summaryOf = useCallback(
+    (id: string) => index.current.summaryOf(id),
+    // revision 变化时组件要重新取值
+    [revision],
+  );
+
+  return { ready, revision, backlinksOf, isBroken, summaryOf, touch, index: index.current };
 }

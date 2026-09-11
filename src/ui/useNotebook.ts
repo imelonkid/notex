@@ -43,6 +43,11 @@ export function useNotebook(store: NotebookStore | null) {
   const [missingFile, setMissingFile] = useState(false);
   /** 最近一次成功写盘，链接索引靠它即时跟上，不必等下一轮轮询 */
   const [lastSaved, setLastSaved] = useState<LastSaved | null>(null);
+  /**
+   * 有改动还没落盘。dirty 本来只是个 ref，界面读不到——
+   * 而"已保存"这个指示只有在它可信时才有意义，所以单独出一份 state。
+   */
+  const [hasUnsaved, setHasUnsaved] = useState(false);
 
   const nbRef = useRef<Notebook | null>(null);
   nbRef.current = nb;
@@ -89,6 +94,10 @@ export function useNotebook(store: NotebookStore | null) {
         clearTimeout(timer.current);
         timer.current = null;
       }
+      // 没有改动就不写盘。以前这里不看改动，每次切走一篇笔记都会把它原样重写一遍：
+      // 修改时间跟着变，「最近更新」就成了「最近看过」，Git 也会看到一堆假改动；
+      // 文件在外部被动过时，一篇没改的笔记切走也会弹冲突提示
+      if (!force && !dirty.current) return 'nothing';
       if (!force && missingFileRef.current) {
         // 文件已被外部删除，自动保存不该把它悄悄复活
         debug.warn('save', '文件已在外部删除，跳过保存', { id: nb.id });
@@ -109,6 +118,7 @@ export function useNotebook(store: NotebookStore | null) {
       try {
         await debug.op('save', '写盘', () => store.save(nb), { id: nb.id, cells: nb.cells.length });
         dirty.current = false;
+        setHasUnsaved(false);
         setConflict(false);
         setError(null);
         // 存成功了才更新链接索引，索引反映的是磁盘上的内容
@@ -144,6 +154,7 @@ export function useNotebook(store: NotebookStore | null) {
   const scheduleSave = useCallback(() => {
     if (timer.current) clearTimeout(timer.current);
     dirty.current = true;
+    setHasUnsaved(true);
     timer.current = setTimeout(() => void flush(), SAVE_DEBOUNCE_MS);
   }, [flush]);
 
@@ -155,6 +166,7 @@ export function useNotebook(store: NotebookStore | null) {
       timer.current = null;
     }
     dirty.current = false;
+    setHasUnsaved(false);
     const loaded = await debug.op('note', '从磁盘重新读取', () => store.load(activeId), { id: activeId });
     if (loaded) {
       nbRef.current = loaded;
@@ -174,8 +186,14 @@ export function useNotebook(store: NotebookStore | null) {
         nbRef.current = draft;
         return draft;
       });
-      if (immediate) void flush();
-      else scheduleSave();
+      if (immediate) {
+        // 立即保存不经过 scheduleSave，这里得自己标上"有改动"，否则 flush 会当成没改而跳过
+        dirty.current = true;
+        setHasUnsaved(true);
+        void flush();
+      } else {
+        scheduleSave();
+      }
     },
     [flush, scheduleSave],
   );
@@ -203,10 +221,13 @@ export function useNotebook(store: NotebookStore | null) {
   );
 
   const open = useCallback(
-    /** keepDraft=false 用于改名/移动：文件已经迁走了，旧身份不能再写回磁盘 */
-    async (id: string, opts: { skipFlush?: boolean } = {}) => {
-      if (!store) return;
-      if (!opts.skipFlush && !(await leaveCurrent())) return;
+    /**
+     * 返回是否真的打开了：当前笔记没存上会被拦下，调用方据此决定要不要切页面。
+     * skipFlush 用于改名/移动——文件已经迁走了，旧身份不能再写回磁盘。
+     */
+    async (id: string, opts: { skipFlush?: boolean } = {}): Promise<boolean> => {
+      if (!store) return false;
+      if (!opts.skipFlush && !(await leaveCurrent())) return false;
       const loaded = await debug.op('note', '打开笔记', () => store.load(id), { id });
       if (loaded) {
         nbRef.current = loaded;
@@ -216,10 +237,12 @@ export function useNotebook(store: NotebookStore | null) {
         setConflict(false);
         setMissingFile(false);
         dirty.current = false;
-      } else {
-        debug.error('note', '打不开笔记', { id });
-        setError(`打不开笔记：${id}`);
+        setHasUnsaved(false);
+        return true;
       }
+      debug.error('note', '打不开笔记', { id });
+      setError(`打不开笔记：${id}`);
+      return false;
     },
     [store, leaveCurrent],
   );
@@ -324,15 +347,19 @@ export function useNotebook(store: NotebookStore | null) {
 
   const createNotebook = useCallback(
     async (title: string, dir = '') => {
-      if (!store) return debug.warn('note', '新建笔记：没有存储，忽略', { title, dir });
+      if (!store) {
+        debug.warn('note', '新建笔记：没有存储，忽略', { title, dir });
+        return false;
+      }
       debug.log('note', '新建笔记', { title, dir });
-      if (!(await leaveCurrent())) return;
+      if (!(await leaveCurrent())) return false;
       const created = await store.create(title, dir);
       nbRef.current = created;
       setNb(created);
       setActiveId(created.id);
       setMissingFile(false);
       await refresh();
+      return true;
     },
     [store, leaveCurrent, refresh],
   );
@@ -491,6 +518,7 @@ export function useNotebook(store: NotebookStore | null) {
     moveNotebook,
     updateNote,
     lastSaved,
+    hasUnsaved,
     renameNotebook,
     activeId,
     nb,
@@ -504,6 +532,8 @@ export function useNotebook(store: NotebookStore | null) {
       void flush(true);
     },
     open,
+    /** 离开当前笔记前确认它已落盘；打开文件夹页时也要走这一步 */
+    leaveCurrent,
     update,
     flush,
     refresh,

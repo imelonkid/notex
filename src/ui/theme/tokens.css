@@ -1,39 +1,21 @@
 /**
- * 语义 token 层。组件只消费这些变量，不写死任何颜色。
- * 主题包通过覆盖这些变量改外观，不改布局。
+ * 框架私有的 token。
+ *
+ * 颜色、字体、字重、标题比例由主题提供：主题文件（themes/*.json、~/.notex/themes/*.json）
+ * 经 src/core/theme.ts 校验、合并后，以 :root 变量的形式注入。
+ * 这里不放任何主题数据，免得同一份值在 CSS 和主题文件里各写一遍。
+ *
+ * 下面这些是框架自己的：尺寸、间距、布局，以及由基准字号派生的字号。
+ * 主题碰不到——原则是有限度的灵活，改了它们会错位。
  */
 
 :root {
-  /* 表面 */
-  --nx-bg: #fdfdfc;
-  --nx-bg-subtle: #f7f7f4;
-  --nx-bg-hover: #f2f2ee;
-  --nx-bg-active: #f0f0ec;
-  --nx-border: #e6e6e1;
-  --nx-border-strong: #d8d8d2;
-
-  /* 文字 */
-  --nx-fg: #1c1c1a;
-  --nx-fg-soft: #3a3a36;
-  --nx-fg-muted: #6f6f6a;
-  --nx-fg-faint: #a3a39c;
-  --nx-fg-ghost: #c2c2bb;
-  --nx-fg-invert: #fdfdfc;
-
-  /* 语义色 */
-  --nx-accent: #3f5a7d;
-  --nx-danger: #9c3423;
-  --nx-warn: #8a6d1f;
-  --nx-success: #4b7d5b;
-  --nx-selection: #e8e8e2;
-
-  /* 字体 */
-  --nx-font-body: 'Helvetica Neue', Helvetica, Arial, 'PingFang SC', 'Microsoft YaHei', sans-serif;
-  --nx-font-heading: 'Newsreader', Georgia, 'Songti SC', serif;
-  --nx-font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  /* 基准字号是用户设置（设置 → 字号），ThemeProvider 会覆盖这三个；这里只是兜底 */
   --nx-font-size: 13.5px;
   --nx-font-size-code: 13px;
-  --nx-font-size-prose: 16px;
+  --nx-font-size-prose: 15px;
+  /* 侧栏：扫视用，比界面字号大一点 */
+  --nx-font-size-side: calc(var(--nx-font-size) + 1px);
 
   /* 形状与尺寸 */
   --nx-radius: 4px;
@@ -44,97 +26,25 @@
   --nx-page-pad-right: 56px;
   --nx-page-pad-top: 28px;
   --nx-gutter-width: 40px;
-  --nx-sidebar-width: 230px;
+  --nx-sidebar-width: 248px;
 
-  /* 代码高亮 */
-  --nx-syn-keyword: #7c3aed;
-  --nx-syn-string: #15803d;
-  --nx-syn-comment: #8a8a84;
-  --nx-syn-number: #b45309;
-  --nx-syn-type: #0e7490;
-  --nx-syn-function: #1d4ed8;
-  --nx-syn-variable: #1c1c1a;
-  --nx-syn-operator: #6f6f6a;
-  --nx-syn-punct: #6f6f6a;
+  /* 笔记大标题：字号跟着正文基准走，字体、字重、颜色来自主题 */
+  --nx-title-font: var(--nx-font-heading);
+  --nx-title-size: calc(var(--nx-font-size-prose) * 2);
 
-  /* 编辑器 */
-  --nx-editor-bg: var(--nx-bg-subtle);
-  --nx-editor-caret: var(--nx-fg);
-  --nx-editor-selection: #d6e2f0;
-  --nx-editor-active-line: rgba(0, 0, 0, 0.025);
-  --nx-editor-gutter: var(--nx-fg-ghost);
-}
-
-/* 深色：只覆盖需要变的 token */
-:root[data-theme='dark'] {
-  --nx-bg: #1a1a18;
-  --nx-bg-subtle: #212120;
-  --nx-bg-hover: #282826;
-  --nx-bg-active: #2f2f2c;
-  --nx-border: #33332f;
-  --nx-border-strong: #45453f;
-
-  --nx-fg: #e8e8e2;
-  --nx-fg-soft: #d0d0c8;
-  --nx-fg-muted: #a0a098;
-  --nx-fg-faint: #75756e;
-  --nx-fg-ghost: #55554f;
-  --nx-fg-invert: #1a1a18;
-
-  --nx-accent: #8fb3d9;
-  --nx-danger: #e08b7a;
-  --nx-warn: #d4b062;
-  --nx-success: #86c19b;
-  --nx-selection: #3a3a34;
-
-  --nx-syn-keyword: #c4a2f5;
-  --nx-syn-string: #9ed9ab;
-  --nx-syn-comment: #75756e;
-  --nx-syn-number: #f0b464;
-  --nx-syn-type: #7fd3e0;
-  --nx-syn-function: #93bdf5;
-  --nx-syn-variable: #e8e8e2;
-  --nx-syn-operator: #a0a098;
-  --nx-syn-punct: #a0a098;
-
-  --nx-editor-selection: #3a4a5e;
-  --nx-editor-active-line: rgba(255, 255, 255, 0.03);
-}
-
-/* auto：跟随系统，且不被显式的 light 覆盖 */
-@media (prefers-color-scheme: dark) {
-  :root[data-theme='auto'] {
-    --nx-bg: #1a1a18;
-    --nx-bg-subtle: #212120;
-    --nx-bg-hover: #282826;
-    --nx-bg-active: #2f2f2c;
-    --nx-border: #33332f;
-    --nx-border-strong: #45453f;
-
-    --nx-fg: #e8e8e2;
-    --nx-fg-soft: #d0d0c8;
-    --nx-fg-muted: #a0a098;
-    --nx-fg-faint: #75756e;
-    --nx-fg-ghost: #55554f;
-    --nx-fg-invert: #1a1a18;
-
-    --nx-accent: #8fb3d9;
-    --nx-danger: #e08b7a;
-    --nx-warn: #d4b062;
-    --nx-success: #86c19b;
-    --nx-selection: #3a3a34;
-
-    --nx-syn-keyword: #c4a2f5;
-    --nx-syn-string: #9ed9ab;
-    --nx-syn-comment: #75756e;
-    --nx-syn-number: #f0b464;
-    --nx-syn-type: #7fd3e0;
-    --nx-syn-function: #93bdf5;
-    --nx-syn-variable: #e8e8e2;
-    --nx-syn-operator: #a0a098;
-    --nx-syn-punct: #a0a098;
-
-    --nx-editor-selection: #3a4a5e;
-    --nx-editor-active-line: rgba(255, 255, 255, 0.03);
-  }
+  /* Markdown：排版间距归框架，颜色、字体、字重、标题比例来自主题 */
+  --nx-md-font: var(--nx-font-body);
+  --nx-md-font-size: var(--nx-font-size-prose);
+  --nx-md-line-height: 1.68;
+  /* 开了 breaks，单个换行是 <br>；段间距要明显大于行距，否则分不出段落 */
+  --nx-md-paragraph-gap: 0.9em;
+  --nx-md-heading-line-height: 1.35;
+  --nx-md-heading-gap-top: 1.4em;
+  --nx-md-heading-gap-bottom: 0.55em;
+  --nx-md-code-font: var(--nx-font-mono);
+  --nx-md-code-radius: 3px;
+  --nx-md-quote-border-width: 2px;
+  --nx-md-list-indent: 1.4em;
+  --nx-md-list-item-gap: 0.25em;
+  --nx-md-table-cell-padding: 6px 12px;
 }

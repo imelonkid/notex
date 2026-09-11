@@ -32,9 +32,6 @@ button {
   overflow: hidden;
   background: var(--nx-bg);
 }
-.nx-app[data-collapsed='true'] .nx-page {
-  padding-left: max(var(--nx-page-pad-x), 44px);
-}
 
 .nx-sidebar {
   width: var(--nx-sidebar-width);
@@ -57,27 +54,21 @@ button {
 
 /* 折叠/展开按钮 */
 .nx-sidebar-toggle {
-  background: transparent;
-  border: 1px solid transparent;
-  color: var(--nx-fg-faint);
-  border-radius: var(--nx-radius-sm);
-  padding: 3px 7px;
-  font-size: 14px;
-  line-height: 1;
   flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 26px;
+  padding: 0;
+  color: var(--nx-fg-muted);
+  background: transparent;
+  border: 1px solid var(--nx-border-strong);
+  border-radius: var(--nx-radius);
 }
 .nx-sidebar-toggle:hover {
   color: var(--nx-fg);
   background: var(--nx-bg-hover);
-}
-/* 折叠后浮在左上角，不占布局 */
-.nx-sidebar-toggle[data-floating='true'] {
-  position: fixed;
-  top: 12px;
-  left: 10px;
-  z-index: 20;
-  background: var(--nx-bg);
-  border-color: var(--nx-border);
 }
 
 .nx-brand {
@@ -99,18 +90,19 @@ button {
 }
 
 .nx-section-label {
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  color: var(--nx-fg-faint);
-  padding: 0 10px 6px;
+  font-size: 12px;
+  font-weight: 500;
+  /* 中文拉开字距会散，只留一点点 */
+  letter-spacing: 0.02em;
+  color: var(--nx-fg-muted);
+  padding: 0 10px 8px;
 }
 
 .nx-nb-item {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 7px 6px 7px 10px;
+  gap: 7px;
+  padding: 9px 6px 9px 10px;
   border-radius: var(--nx-radius-sm);
   cursor: pointer;
   /* WebKit 里普通元素光有 draggable 属性还不够，必须显式声明可拖 */
@@ -129,6 +121,8 @@ button {
 }
 .nx-nb-item[data-active='true'] {
   background: var(--nx-bg-active);
+  /* 左侧竖条：一眼看出"你在这儿"，用内阴影不挤动布局 */
+  box-shadow: inset 3px 0 0 var(--nx-fg);
 }
 .nx-nb-title {
   flex: 1;
@@ -136,7 +130,7 @@ button {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: var(--nx-font-size);
+  font-size: var(--nx-font-size-side);
 }
 .nx-nb-item[data-active='true'] .nx-nb-title {
   font-weight: 600;
@@ -273,10 +267,11 @@ button {
 }
 
 .nx-title-input {
-  font-family: var(--nx-font-heading);
-  font-weight: 500;
-  font-size: 30px;
-  color: var(--nx-fg);
+  /* 字体、字重、颜色来自主题（fonts.title / typography.title-weight / colors.title），字号跟正文基准走 */
+  font-family: var(--nx-title-font);
+  font-weight: var(--nx-title-weight);
+  font-size: var(--nx-title-size);
+  color: var(--nx-title-color);
   background: transparent;
   border: none;
   outline: none;
@@ -437,6 +432,95 @@ button {
   margin-bottom: 7px;
   flex-wrap: wrap;
 }
+.nx-save-state {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--nx-fg-muted);
+  white-space: nowrap;
+}
+.nx-save-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--nx-success);
+}
+.nx-save-state[data-kind='saving'] .nx-save-dot {
+  background: var(--nx-fg-faint);
+  animation: nx-pulse 1s ease-in-out infinite;
+}
+.nx-save-state[data-kind='conflict'] .nx-save-dot {
+  background: var(--nx-warn);
+}
+.nx-save-state[data-kind='error'] .nx-save-dot {
+  background: var(--nx-danger);
+}
+@keyframes nx-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* 运行结果条：贴在输出上方，回答"这次怎么样、跑了多久" */
+.nx-run-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 10px 0 -2px;
+  font-size: 12px;
+  color: var(--nx-fg-muted);
+}
+.nx-run-summary-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--nx-success);
+}
+.nx-run-summary[data-status='error'] .nx-run-summary-dot {
+  background: var(--nx-danger);
+}
+.nx-run-summary[data-status='aborted'] .nx-run-summary-dot {
+  background: var(--nx-warn);
+}
+.nx-run-summary[data-status='error'] {
+  color: var(--nx-danger);
+}
+.nx-run-summary-ms {
+  color: var(--nx-fg-faint);
+}
+
+/* 侧栏常驻的新建入口 */
+.nx-new-note {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 16px;
+  padding: 8px 10px;
+  text-align: center;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--nx-fg);
+  background: transparent;
+  border: 1px solid var(--nx-border-strong);
+  border-radius: var(--nx-radius);
+}
+.nx-new-note:hover {
+  border-color: var(--nx-fg);
+  background: var(--nx-bg-hover);
+}
+
+/* 侧栏行图标：只帮着扫层级，不抢注意力 */
+.nx-row-icon {
+  flex: none;
+  color: var(--nx-fg-faint);
+}
+.nx-nb-item[data-active='true'] .nx-row-icon,
+.nx-folder .nx-row-icon {
+  color: var(--nx-fg-muted);
+}
+
 /* 渲染失败的 cell：单独降级，不连累整篇 */
 .nx-cell-broken {
   margin: 8px 0 8px calc(var(--nx-gutter-width) + 10px);
@@ -464,12 +548,16 @@ button {
   line-height: 1.6;
 }
 
-/* 复制按钮：停在 cell 右上角，平时隐身，鼠标移上来或选中这个 cell 才出现 */
-.nx-cell-copy {
+/* 角落工具：复制与更多操作并排，平时隐身，鼠标移上来或选中这个 cell 才出现 */
+.nx-cell-tools {
   position: absolute;
   top: 4px;
   right: 6px;
   z-index: 3;
+  display: flex;
+  gap: 4px;
+}
+.nx-cell-copy {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -555,7 +643,7 @@ button {
   background: var(--nx-bg);
   border: 1px solid var(--nx-border-strong);
   border-radius: var(--nx-radius);
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.16);
+  box-shadow: 0 8px 28px var(--nx-shadow);
 }
 .nx-langmenu-item {
   display: flex;
@@ -730,10 +818,16 @@ svg.nx-out-html {
 }
 
 /* Markdown 渲染 */
+/*
+ * Markdown 渲染。颜色、字体、字重、标题比例来自主题（docs/THEME.md）；
+ * 行距、段距、缩进这些间距归框架，定义在 tokens.css，主题碰不到。
+ */
 .nx-md {
-  line-height: 1.72;
-  font-size: var(--nx-font-size-prose);
-  color: var(--nx-fg);
+  font-family: var(--nx-md-font);
+  font-size: var(--nx-md-font-size);
+  line-height: var(--nx-md-line-height);
+  /* 正文退半档，把最深的颜色留给标题和加粗，层级才拉得开 */
+  color: var(--nx-md-color);
 }
 .nx-md > :first-child {
   margin-top: 0;
@@ -744,55 +838,87 @@ svg.nx-out-html {
 .nx-md h1,
 .nx-md h2,
 .nx-md h3,
-.nx-md h4 {
-  font-family: var(--nx-font-heading);
-  font-weight: 500;
-  line-height: 1.25;
-  margin: 1em 0 0.45em;
+.nx-md h4,
+.nx-md h5,
+.nx-md h6 {
+  /*
+   * 默认用无衬线。量过渲染墨迹（48px 同一段字）：
+   *   宋体 Bold 5205 < 正文苹方 Regular 5322 < 苹方 Semibold 7080
+   * 宋体 Bold 每个字比正文还"轻"，加粗了也分不开。
+   * 想要衬线标题的主题：fonts.heading 换衬线，typography.heading-weight 给 900，中文才会落到宋体 Black。
+   */
+  font-family: var(--nx-md-heading-font);
+  font-weight: var(--nx-md-heading-weight);
+  color: var(--nx-md-heading-color);
+  line-height: var(--nx-md-heading-line-height);
+  margin: var(--nx-md-heading-gap-top) 0 var(--nx-md-heading-gap-bottom);
 }
+/* 默认 h1 比笔记标题小一档：笔记标题才是这一页的主角 */
 .nx-md h1 {
-  font-size: 30px;
+  font-size: calc(var(--nx-md-h1-scale) * 1em);
 }
 .nx-md h2 {
-  font-size: 23px;
+  font-size: calc(var(--nx-md-h2-scale) * 1em);
 }
 .nx-md h3 {
-  font-size: 18.5px;
+  font-size: calc(var(--nx-md-h3-scale) * 1em);
+}
+/* h4 以前没定字号，直接继承正文——"#### 思路"和正文一样大 */
+.nx-md h4 {
+  font-size: calc(var(--nx-md-h4-scale) * 1em);
+}
+.nx-md h5 {
+  font-size: calc(var(--nx-md-h5-scale) * 1em);
+}
+.nx-md h6 {
+  font-size: calc(var(--nx-md-h6-scale) * 1em);
+}
+.nx-md strong {
+  font-weight: var(--nx-md-strong-weight);
+  color: var(--nx-md-strong-color);
+}
+.nx-md a {
+  color: var(--nx-md-link-color);
 }
 .nx-md p {
-  margin: 0.55em 0;
+  /* 开了 breaks，单个换行是 <br>；段间距要明显大于行距，否则分不出段落 */
+  margin: var(--nx-md-paragraph-gap) 0;
 }
 .nx-md ul,
 .nx-md ol {
-  margin: 0.55em 0;
-  padding-left: 1.4em;
+  margin: var(--nx-md-paragraph-gap) 0;
+  padding-left: var(--nx-md-list-indent);
 }
 .nx-md li {
-  margin: 0.25em 0;
+  margin: var(--nx-md-list-item-gap) 0;
 }
 .nx-md code {
-  background: var(--nx-bg-hover);
-  border-radius: 3px;
+  font-family: var(--nx-md-code-font);
+  font-size: calc(var(--nx-md-code-scale) * 1em);
+  color: var(--nx-md-code-color);
+  background: var(--nx-md-code-bg);
+  border-radius: var(--nx-md-code-radius);
   padding: 1px 5px;
-  font-family: var(--nx-font-mono);
-  font-size: 0.85em;
 }
 .nx-md pre {
-  background: var(--nx-bg-subtle);
-  border: 1px solid var(--nx-border);
+  color: var(--nx-md-pre-color);
+  background: var(--nx-md-pre-bg);
+  border: 1px solid var(--nx-md-pre-border);
   border-radius: var(--nx-radius);
   padding: 13px 15px;
   overflow: auto;
 }
+/* 代码块里的 code 不沿用行内代码的颜色和底色 */
 .nx-md pre code {
+  color: inherit;
   background: none;
   padding: 0;
 }
 .nx-md blockquote {
   margin: 0.7em 0;
   padding: 2px 16px;
-  border-left: 2px solid var(--nx-border-strong);
-  color: var(--nx-fg-muted);
+  border-left: var(--nx-md-quote-border-width) solid var(--nx-md-quote-border);
+  color: var(--nx-md-quote-color);
 }
 .nx-md img {
   max-width: 100%;
@@ -803,13 +929,18 @@ svg.nx-out-html {
 }
 .nx-md th,
 .nx-md td {
-  border-bottom: 1px solid var(--nx-border);
-  padding: 6px 12px;
+  border-bottom: 1px solid var(--nx-md-table-border);
+  padding: var(--nx-md-table-cell-padding);
   text-align: left;
+}
+.nx-md th {
+  background: var(--nx-md-table-head-bg);
+  font-weight: var(--nx-md-strong-weight);
+  color: var(--nx-md-heading-color);
 }
 .nx-md hr {
   border: none;
-  border-top: 1px solid var(--nx-border);
+  border-top: 1px solid var(--nx-md-rule);
 }
 .nx-md-empty {
   color: var(--nx-fg-faint);
@@ -857,7 +988,7 @@ svg.nx-out-html {
 .nx-modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.28);
+  background: var(--nx-overlay);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -871,7 +1002,7 @@ svg.nx-out-html {
   max-height: 80vh;
   overflow-y: auto;
   padding: 22px 24px;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 12px 40px var(--nx-shadow);
 }
 .nx-modal h2 {
   font-family: var(--nx-font-heading);
@@ -1077,12 +1208,13 @@ svg.nx-out-html {
 .nx-folder {
   display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 6px 6px 6px 10px;
+  gap: 7px;
+  padding: 8px 6px 8px 10px;
   border-radius: var(--nx-radius-sm);
   cursor: pointer;
-  font-size: var(--nx-font-size);
-  color: var(--nx-fg-muted);
+  font-size: var(--nx-font-size-side);
+  /* 文件夹是容器，不该比里面的笔记还淡——之前层级是反的 */
+  color: var(--nx-fg);
   user-select: none;
 }
 .nx-folder:hover {
@@ -1104,11 +1236,6 @@ svg.nx-out-html {
 .nx-folder-caret[data-open='true'] {
   transform: rotate(90deg);
 }
-.nx-folder-count {
-  font-size: 11px;
-  color: var(--nx-fg-faint);
-  flex: none;
-}
 
 
 /* 右键菜单 */
@@ -1120,7 +1247,7 @@ svg.nx-out-html {
   background: var(--nx-bg);
   border: 1px solid var(--nx-border-strong);
   border-radius: var(--nx-radius);
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.16);
+  box-shadow: 0 8px 28px var(--nx-shadow);
 }
 .nx-menu-item {
   display: block;
@@ -1182,7 +1309,7 @@ svg.nx-out-html {
   background: var(--nx-bg);
   border: 1px solid var(--nx-border-strong);
   border-radius: var(--nx-radius);
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.16);
+  box-shadow: 0 8px 28px var(--nx-shadow);
   z-index: 1;
 }
 /* 靠近窗口右缘时朝左展开 */
@@ -1271,7 +1398,7 @@ svg.nx-out-html {
   background: var(--nx-bg);
   border: 1px solid var(--nx-border-strong);
   border-radius: var(--nx-radius);
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.16);
+  box-shadow: 0 8px 28px var(--nx-shadow);
 }
 .nx-wiki-item {
   display: flex;
@@ -1397,4 +1524,332 @@ svg.nx-out-html {
   border: 1px solid var(--nx-border-strong);
   border-radius: var(--nx-radius-sm);
   padding: 2px 6px;
+}
+
+/* 设置 → 主题与字号 */
+.nx-theme-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+.nx-theme-row > span:first-child {
+  flex: none;
+  width: 52px;
+  color: var(--nx-fg-muted);
+}
+.nx-select {
+  min-width: 200px;
+  padding: 5px 8px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--nx-fg);
+  background: var(--nx-bg);
+  border: 1px solid var(--nx-border-strong);
+  border-radius: var(--nx-radius-sm);
+}
+.nx-select:focus {
+  outline: none;
+  border-color: var(--nx-fg);
+}
+.nx-stepper {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--nx-border-strong);
+  border-radius: var(--nx-radius-sm);
+}
+.nx-stepper button {
+  width: 28px;
+  height: 26px;
+  padding: 0;
+  font-size: 14px;
+  color: var(--nx-fg);
+  background: transparent;
+  border: none;
+}
+.nx-stepper button:hover:not(:disabled) {
+  background: var(--nx-bg-hover);
+}
+.nx-stepper button:disabled {
+  color: var(--nx-fg-ghost);
+  cursor: default;
+}
+.nx-stepper-value {
+  min-width: 54px;
+  text-align: center;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  border-left: 1px solid var(--nx-border);
+  border-right: 1px solid var(--nx-border);
+  line-height: 26px;
+}
+.nx-theme-issues {
+  margin-top: 10px;
+  padding: 8px 12px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--nx-fg-soft);
+  border: 1px solid var(--nx-warn);
+  border-radius: var(--nx-radius);
+}
+.nx-theme-issues-title {
+  font-weight: 600;
+  color: var(--nx-warn);
+  margin-bottom: 4px;
+}
+.nx-theme-issues ul {
+  margin: 0;
+  padding-left: 1.2em;
+}
+
+/* 顶栏：左边是笔记在哪（折叠侧栏时还有展开按钮），右边是存没存。滚动时一直可见 */
+.nx-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 32px;
+  margin-bottom: 10px;
+  padding: 6px 0;
+  background: var(--nx-bg);
+}
+.nx-crumbs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--nx-fg-muted);
+  white-space: nowrap;
+  overflow: hidden;
+}
+/* 第一段文字和下面的大标题左对齐 */
+.nx-topbar > .nx-crumbs:first-child {
+  margin-left: -6px;
+}
+.nx-crumb {
+  min-width: 0;
+  padding: 2px 6px;
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: none;
+  border-radius: var(--nx-radius-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+button.nx-crumb:hover {
+  color: var(--nx-fg);
+  background: var(--nx-bg-hover);
+}
+.nx-crumb[data-current='true'] {
+  color: var(--nx-fg);
+  cursor: default;
+}
+.nx-crumb-sep {
+  flex: none;
+  color: var(--nx-fg-ghost);
+}
+
+/* 侧栏：打开着文件夹页的那个文件夹，和选中的笔记一个样子 */
+.nx-folder[data-active='true'] {
+  background: var(--nx-bg-active);
+  box-shadow: inset 3px 0 0 var(--nx-fg);
+}
+.nx-folder[data-active='true'] .nx-nb-title {
+  font-weight: 600;
+}
+/* 三角单独可点：只展开收起，不打开文件夹页 */
+button.nx-folder-caret {
+  width: 18px;
+  margin: -4px -4px -4px -4px;
+  padding: 4px 0;
+  font: inherit;
+  line-height: 1;
+  text-align: center;
+  background: transparent;
+  border: none;
+  border-radius: var(--nx-radius-sm);
+  cursor: pointer;
+}
+button.nx-folder-caret:hover {
+  color: var(--nx-fg);
+  background: var(--nx-bg-active);
+}
+/* 侧栏的「我的笔记」可以点，打开笔记库根的文件夹页 */
+.nx-section-link {
+  padding: 0;
+  font: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+.nx-section-link:hover,
+.nx-section-link[data-active='true'] {
+  color: var(--nx-fg);
+}
+
+/* 文件夹页 */
+.nx-folder-page {
+  padding-bottom: 40px;
+}
+.nx-folder-title {
+  margin: 0;
+  font-family: var(--nx-title-font);
+  font-weight: var(--nx-title-weight);
+  font-size: var(--nx-title-size);
+  line-height: 1.25;
+  color: var(--nx-title-color);
+}
+.nx-folder-stats {
+  margin: 6px 0 4px;
+  font-size: 13px;
+  color: var(--nx-fg-muted);
+}
+.nx-folder-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 6px 0 8px;
+}
+.nx-folder-search {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 10px;
+  color: var(--nx-fg-faint);
+  background: var(--nx-bg-subtle);
+  border: 1px solid var(--nx-border);
+  border-radius: var(--nx-radius);
+}
+.nx-folder-search:focus-within {
+  background: var(--nx-bg);
+  border-color: var(--nx-border-strong);
+}
+.nx-folder-search .nx-row-icon {
+  color: inherit;
+}
+.nx-folder-search input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 13.5px;
+  color: var(--nx-fg);
+  background: transparent;
+  border: none;
+  outline: none;
+}
+.nx-folder-search input::placeholder {
+  color: var(--nx-fg-faint);
+}
+.nx-folder-controls .nx-select {
+  min-width: 120px;
+  height: 34px;
+}
+.nx-folder-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.nx-folder-row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 10px;
+  border-bottom: 1px solid var(--nx-border);
+  cursor: pointer;
+}
+.nx-folder-row:hover,
+.nx-folder-row:focus-visible {
+  background: var(--nx-bg-hover);
+  outline: none;
+}
+.nx-folder-row[data-drop='true'] {
+  background: var(--nx-bg-active);
+  outline: 1px solid var(--nx-border-strong);
+}
+.nx-folder-row-icon {
+  display: flex;
+  color: var(--nx-fg-muted);
+}
+.nx-folder-row-icon .nx-row-icon {
+  color: inherit;
+}
+.nx-folder-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.nx-folder-row-title {
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--nx-fg);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nx-folder-row-excerpt {
+  overflow: hidden;
+  font-size: 13px;
+  color: var(--nx-fg-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nx-folder-row-time {
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--nx-fg-faint);
+  white-space: nowrap;
+}
+.nx-folder-row-tags {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 0;
+}
+.nx-lang-tag {
+  padding: 2px 8px;
+  font-size: 11.5px;
+  color: var(--nx-fg-soft);
+  white-space: nowrap;
+  background: var(--nx-bg-subtle);
+  border: 1px solid var(--nx-border);
+  border-radius: 999px;
+}
+.nx-folder-empty {
+  padding: 48px 0;
+  font-size: 13.5px;
+  text-align: center;
+  color: var(--nx-fg-faint);
+}
+/* 平时只是一行浅色提示，拖着笔记经过时才亮起来 */
+.nx-folder-drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-top: 28px;
+  padding: 22px;
+  font-size: 12.5px;
+  color: var(--nx-fg-faint);
+  border: 1px dashed transparent;
+  border-radius: var(--nx-radius);
+  transition: border-color 0.12s, background 0.12s, color 0.12s;
+}
+.nx-folder-drop .nx-row-icon {
+  color: inherit;
+}
+.nx-folder-drop[data-active='true'] {
+  color: var(--nx-fg);
+  background: var(--nx-bg-subtle);
+  border-color: var(--nx-border-strong);
 }

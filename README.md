@@ -150,20 +150,26 @@ pnpm desktop:build   # → src-tauri/target/release/bundle/macos/NoteX.app
 
 ## 换个主题，继续写
 
-界面颜色统一使用 CSS 变量。一个 JSON 文件就是一个主题包，只需填写想修改的 token：
+一个 JSON 文件就是一个主题。主题只能改四类东西：**颜色、字体、字重、标题比例**。尺寸、间距、布局归应用自己管，主题碰不到——换主题不会把界面弄乱，也不会引入额外风险。
 
-```jsonc
+```json
 {
+  "notex-theme": 1,
   "id": "nord",
   "name": "Nord Dark",
   "appearance": "dark",
-  "tokens": { "bg": "#2e3440", "fg": "#eceff4", "syn-keyword": "#81a1c1" }
+  "colors": { "bg": "#2e3440", "fg": "#eceff4", "syn-keyword": "#81a1c1" }
 }
 ```
 
-放入项目的 `themes/` 或用户的 `~/.notex/themes/`，应用会自动加载。
+没写的字段从同明暗的默认主题继承，只改几个颜色也能得到完整的主题。放进 `~/.notex/themes/`，在设置里选中；改完切回应用即生效。
 
-CodeMirror 与 Markdown 代码块共用 `--nx-syn-*` 语法配色变量，编辑和阅读时保持一致。
+设置里可以「跟随系统」，分别指定浅色和深色时用哪个主题。字号是个人偏好，单独设置，换主题不会改变它。
+
+- [主题说明](docs/THEME.md)：原则、格式、继承与校验规则
+- [字段参考](docs/THEME-REFERENCE.md)：全部可写字段与默认值
+- [theme.schema.json](docs/theme.schema.json)：在编辑器里补全和校验
+- [示例主题](examples/themes/ink.json)
 
 ## 架构
 
@@ -264,6 +270,8 @@ docs/           架构设计与方案
 ## 设计文档
 
 - [架构设计](docs/ARCHITECTURE.md)
+- [主题](docs/THEME.md)
+- [主题边界调研](docs/RESEARCH-主题边界.md)
 - [目录与超链方案](docs/PROPOSAL-目录与超链.md)
 - [cell 操作重构](docs/PROPOSAL-cell操作重构.md)
 - [执行序号调研](docs/RESEARCH-执行序号.md)

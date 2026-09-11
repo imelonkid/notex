@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { debug } from '@core/debug';
 import { writeClipboard } from './clipboard';
-import { LANGS, isCode, type LangId, type Output, type RunMark } from '@core/model';
+import { LANGS, isCode, type LangId, type Output, type RunMark, type RunRecord } from '@core/model';
 import { exportIpynb, exportMarkdown, importNotebook } from '@core/files';
 import { parseDeps } from '@core/deps';
 import { resolveNoteLink } from '@core/links';
@@ -14,6 +14,9 @@ import { Backlinks } from './components/Backlinks';
 import { Shortcuts } from './components/Shortcuts';
 import { AskModal, type AskRequest, type AskState } from './components/AskModal';
 import { CellBoundary } from './components/CellBoundary';
+import { SidebarToggle } from './components/SidebarToggle';
+import { Breadcrumb } from './components/Breadcrumb';
+import { FolderPage } from './components/FolderPage';
 import { useLinkIndex } from './useLinkIndex';
 import { SettingsModal } from './components/SettingsModal';
 import { useRuntimes } from './RuntimeContext';
@@ -31,7 +34,8 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
    * 刷新页面就没了，因为那时内核也是全新的，装订线上不该再声称"跑过"。
    * 放在笔记外面，切换笔记再切回来标记还在。
    */
-  const [runMarks, setRunMarks] = useState<Record<string, RunMark>>({});
+  /** 本次会话每个 cell 的执行结果，带耗时——界面上要显示"跑了多久" */
+  const [runMarks, setRunMarks] = useState<Record<string, RunRecord>>({});
   const [dragId, setDragId] = useState<string | null>(null);
   const [dropId, setDropId] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -52,6 +56,13 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
   const [renamingId, setRenamingId] = useState<string | null>(null);
   /** 当前 cell，工具栏与快捷键作用于它 */
   const [activeCellId, setActiveCellId] = useState<string | null>(null);
+  /**
+   * 正在看的文件夹页，笔记库根为空串；看笔记时为 null。
+   * 文件夹页和笔记页共用同一块主区，由它决定显示哪一个。
+   */
+  const [folderView, setFolderView] = useState<string | null>(null);
+  const folderViewRef = useRef(folderView);
+  folderViewRef.current = folderView;
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [ask, setAsk] = useState<AskState | null>(null);
   /** 刚复制过的 cell，用于在按钮上短暂打勾 */
@@ -108,8 +119,8 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
           title: '创建笔记',
           message: `笔记「${name}」还不存在，现在创建？`,
           confirmLabel: '创建',
-        }).then((ok) => {
-          if (ok !== null) void book.createNotebook(name, targetDir);
+        }).then(async (ok) => {
+          if (ok !== null && (await book.createNotebook(name, targetDir))) setFolderView(null);
         });
         return;
       }
@@ -119,7 +130,9 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
       }
       pendingHash.current = hash ?? null;
       setEditingId(null);
-      void book.open(id);
+      void book.open(id).then((opened) => {
+        if (opened) setFolderView(null);
+      });
     },
     [book],
   );
@@ -191,7 +204,7 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
     () =>
       registry.onRestart((lang) => {
         setRunMarks((r) => {
-          const next: Record<string, RunMark> = {};
+          const next: Record<string, RunRecord> = {};
           for (const cell of nbRef.current?.cells ?? []) {
             const m = r[cell.id];
             if (m && isCode(cell) && cell.lang !== lang) next[cell.id] = m;
@@ -231,7 +244,8 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
           delete next[cellId];
           return next;
         });
-      const mark = (m: RunMark) => setRunMarks((r) => ({ ...r, [cellId]: m }));
+      const mark = (m: RunMark, ms?: number) =>
+        setRunMarks((r) => ({ ...r, [cellId]: { status: m, ms, at: Date.now() } }));
 
       setRunningIds((r) => ({ ...r, [cellId]: true }));
       writeOutputs([]);
@@ -241,7 +255,7 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
         debug.error('run', '内核不可用', { cellId, lang });
         stopRunning();
         writeOutputs([{ type: 'missing-runtime', lang }]);
-        mark('error');
+        mark('error', Math.round(performance.now() - runStartedAt));
         return 'error';
       }
 
@@ -281,7 +295,7 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
           });
           stopRunning();
           writeOutputs(outputs);
-          mark('error');
+          mark('error', Math.round(performance.now() - runStartedAt));
           return 'error';
         } finally {
           setDepsStatus((d) => {
@@ -305,17 +319,12 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
         push({ type: 'error', ename: 'KernelError', evalue: String(e), traceback: [] });
         status = 'error';
       } finally {
+        const ms = Math.round(performance.now() - runStartedAt);
         registry.setBusy(lang, false);
         stopRunning();
         writeOutputs(outputs);
-        mark(status);
-        debug.log('run', '运行结束', {
-          cellId,
-          lang,
-          status,
-          ms: Math.round(performance.now() - runStartedAt),
-          outputs: outputs.length,
-        });
+        mark(status, ms);
+        debug.log('run', '运行结束', { cellId, lang, status, ms, outputs: outputs.length });
       }
       return status;
     },
@@ -439,6 +448,10 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
       const key = e.key.toLowerCase();
       const active = activeCellIdRef.current;
 
+      // 文件夹页上没有 cell：只留侧栏、保存、快捷键面板几个全局键，
+      // 否则 ⌘↩、⌘⌫ 会去改背后那篇看不见的笔记
+      if (folderViewRef.current !== null && key !== 'b' && key !== 's' && key !== '/') return;
+
       if (key === 'b') {
         e.preventDefault();
         setSidebarCollapsed((c) => !c);
@@ -530,7 +543,7 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
 
   const openNoteMenu = (id: string, x: number, y: number) => {
     const items: MenuItem[] = [
-      { label: '打开', onSelect: () => void book.open(id) },
+      { label: '打开', onSelect: () => void openNote(id) },
       { label: '重命名', onSelect: () => setRenamingId(id) },
       { label: '移动到', separatorBefore: true, children: buildMoveMenu(id) },
       {
@@ -552,7 +565,7 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
     setMenu({ x, y, items });
   };
 
-  const openCellMenu = (cellId: string, x: number, y: number) => {
+  const openCellMenu = (cellId: string, x: number, y: number, align?: 'left' | 'right') => {
     const cells = nbRef.current?.cells ?? [];
     const i = cells.findIndex((c) => c.id === cellId);
     if (i < 0) return;
@@ -561,6 +574,7 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
     setMenu({
       x,
       y,
+      align,
       items: [
         { label: '在上方插入文本', onSelect: () => insertAt(i, 'md') },
         { label: '在上方插入代码', onSelect: () => insertAt(i, 'code') },
@@ -601,25 +615,17 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
     });
   };
 
-  const openFolderMenu = (dir: string, x: number, y: number) => {
+  const openFolderMenu = (dir: string, x: number, y: number, align?: 'left' | 'right') => {
     const inside = book.refs.filter((r) => r.dir === dir || r.dir.startsWith(dir + '/'));
     const items: MenuItem[] = [
-      { label: '新建笔记', onSelect: () => void book.createNotebook('未命名笔记', dir) },
+      { label: '新建笔记', onSelect: () => void createNote('未命名笔记', dir) },
       {
         label:
           depthOf(dir) >= MAX_DIR_DEPTH
             ? `新建文件夹（已达 ${MAX_DIR_DEPTH} 级上限）`
             : '新建文件夹',
         disabled: depthOf(dir) >= MAX_DIR_DEPTH,
-        onSelect: () => {
-          void askUser({
-            title: '新建文件夹',
-            input: { label: '名称', value: '新文件夹' },
-            confirmLabel: '创建',
-          }).then((name) => {
-            if (name) void book.createFolder(joinId(dir, name));
-          });
-        },
+        onSelect: () => askCreateFolder(dir),
       },
     ];
     if (dir) {
@@ -641,49 +647,139 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
         },
       });
     }
-    setMenu({ x, y, items });
+    setMenu({ x, y, align, items });
   };
   const anyRunning = Object.keys(runningIds).length > 0;
   void revision;
 
-  const storeLabel =
-    setup.store.kind === 'vault'
-      ? book.saving
-        ? '保存中…'
-        : setup.vaultPath
-      : '浏览器本地存储';
+  const storeLabel = setup.store.kind === 'vault' ? setup.vaultPath : '浏览器本地存储';
+
+  /**
+   * 侧栏底部列哪些运行时。
+   *
+   * 三行常驻是在回答"哪些装了、哪些没装"——那是首次使用才关心的问题。
+   * 平时只需要当前这篇用到的语言。所以：有任何一个没就绪就全列出来
+   * （装没装是要紧事），都正常则只显示这篇笔记实际用到的。
+   */
+  const visibleRuntimes = (() => {
+    const anyTrouble = LANGS.some((l) => {
+      const st = registry.get(l.id).status;
+      return st === 'missing' || st === 'error' || st === 'unknown';
+    });
+    if (anyTrouble) return LANGS;
+    const used = new Set((nb?.cells ?? []).filter(isCode).map((c) => c.lang));
+    return used.size ? LANGS.filter((l) => used.has(l.id)) : LANGS;
+  })();
+
+  /**
+   * 保存状态。自动保存的应用最需要的确认恰恰是"存住了"，
+   * 以前只在左下角把路径换成"保存中…"，离正在打字的地方最远，
+   * 而且没有"已保存"这个态。
+   */
+  const saveState: { kind: 'saving' | 'saved' | 'conflict' | 'error'; text: string } =
+    book.error
+      ? { kind: 'error', text: '保存出错' }
+      : book.conflict
+        ? { kind: 'conflict', text: '有冲突待处理' }
+        : book.saving
+          ? { kind: 'saving', text: '保存中…' }
+          : book.hasUnsaved
+            ? { kind: 'saving', text: '待保存' }
+            : { kind: 'saved', text: '已保存' };
+
+  /** 侧栏里把某个文件夹的各级父目录和它自己展开，侧栏开着时顺便滚到那一行 */
+  const expandToDir = (dir: string) => {
+    if (!dir) return;
+    const parts = dir.split('/');
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      parts.forEach((_, i) => next.add(parts.slice(0, i + 1).join('/')));
+      return next;
+    });
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        document
+          .querySelector<HTMLElement>(`.nx-folder[data-dir="${CSS.escape(dir)}"]`)
+          ?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }),
+    );
+  };
+
+  /** 打开文件夹页。当前笔记没存上就不切，和切换笔记是同一个规矩 */
+  const openFolder = async (dir: string) => {
+    if (!(await book.leaveCurrent())) return;
+    debug.log('nav', '打开文件夹页', { dir: dir || '（笔记库根）' });
+    setFolderView(dir);
+    setEditingId(null);
+    setActiveCellId(null);
+    expandToDir(dir);
+  };
+
+  /** 所有打开笔记的入口都走这里：真打开了才离开文件夹页 */
+  const openNote = async (id: string) => {
+    setEditingId(null);
+    if (await book.open(id)) setFolderView(null);
+  };
+
+  const createNote = async (title: string, dir = '') => {
+    if (await book.createNotebook(title, dir)) setFolderView(null);
+  };
+
+  /** 把正在拖的笔记放进某个文件夹：侧栏和文件夹页共用 */
+  const dropNoteInto = (dir: string) => {
+    if (dragNoteId) void book.moveNotebook(dragNoteId, dir);
+    setDragNoteId(null);
+    setDropDir(null);
+  };
+
+  const askCreateFolder = (dir: string) => {
+    void askUser({
+      title: '新建文件夹',
+      input: { label: '名称', value: '新文件夹' },
+      confirmLabel: '创建',
+    }).then((name) => {
+      if (name) void book.createFolder(joinId(dir, name));
+    });
+  };
+
+  // 正在看的文件夹被删了（应用里或应用外）：退到还在的上一级
+  useEffect(() => {
+    if (!folderView || book.folders.includes(folderView)) return;
+    // 列表还没读出来时什么都判断不了
+    if (!book.refs.length && !book.folders.length) return;
+    let up = dirOf(folderView);
+    while (up && !book.folders.includes(up)) up = dirOf(up);
+    debug.warn('nav', '文件夹已不存在，退到上一级', { from: folderView, to: up || '（笔记库根）' });
+    setFolderView(up);
+  }, [folderView, book.folders, book.refs.length]);
 
   return (
     <div className="nx-app" data-collapsed={sidebarCollapsed}>
-      {sidebarCollapsed && (
-        <button
-          className="nx-sidebar-toggle"
-          data-floating="true"
-          title="展开侧栏（⌘B）"
-          aria-label="展开侧栏"
-          onClick={() => setSidebarCollapsed(false)}
-        >
-          ›
-        </button>
-      )}
-
       <aside className="nx-sidebar" data-collapsed={sidebarCollapsed}>
         <div className="nx-brand">
           <div className="nx-brand-name">NoteX</div>
           <div className="nx-brand-sub">可执行笔记</div>
           <span style={{ flex: 1 }} />
-          <button
-            className="nx-sidebar-toggle"
-            title="折叠侧栏（⌘B）"
-            aria-label="折叠侧栏"
-            onClick={() => setSidebarCollapsed(true)}
-          >
-            ‹
-          </button>
+          <SidebarToggle collapsed={false} onToggle={() => setSidebarCollapsed(true)} />
         </div>
 
+        <button
+          className="nx-new-note"
+          title="在笔记库根目录新建（想放进某个文件夹就右键那个文件夹）"
+          onClick={() => void createNote('未命名笔记')}
+        >
+          ＋ 新建笔记
+        </button>
+
         <div className="nx-section-label nx-section-head">
-          <span>我的笔记</span>
+          <button
+            className="nx-section-link"
+            data-active={folderView === ''}
+            title="打开笔记库"
+            onClick={() => void openFolder('')}
+          >
+            我的笔记
+          </button>
           <button
             className="nx-icon-btn"
             title="重新读取笔记库目录"
@@ -706,7 +802,8 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
           <NoteTree
             notes={book.refs}
             folders={book.folders}
-            activeId={book.activeId}
+            activeId={folderView === null ? book.activeId : null}
+            activeDir={folderView}
             expanded={expanded}
             dragId={dragNoteId}
             dropDir={dropDir}
@@ -718,10 +815,8 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
                 return next;
               })
             }
-            onOpen={(id) => {
-              void book.open(id);
-              setEditingId(null);
-            }}
+            onOpenFolder={(dir) => void openFolder(dir)}
+            onOpen={(id) => void openNote(id)}
             onNoteMenu={openNoteMenu}
             renamingId={renamingId}
             onRenamingChange={setRenamingId}
@@ -733,11 +828,7 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
               setDropDir(null);
             }}
             onDragOverDir={setDropDir}
-            onDropTo={(dir) => {
-              if (dragNoteId) void book.moveNotebook(dragNoteId, dir);
-              setDragNoteId(null);
-              setDropDir(null);
-            }}
+            onDropTo={dropNoteInto}
           />
         </div>
 
@@ -752,7 +843,7 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
             <span className="nx-vault-path">{storeLabel}</span>
           </button>
 
-          {LANGS.map((l) => {
+          {visibleRuntimes.map((l) => {
             const state = registry.get(l.id);
             const label =
               state.status === 'ready' || state.status === 'busy'
@@ -788,6 +879,29 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
 
       <main className="nx-main">
         <div className="nx-page">
+          <div className="nx-topbar">
+            {sidebarCollapsed && <SidebarToggle collapsed onToggle={() => setSidebarCollapsed(false)} />}
+            {folderView !== null ? (
+              <Breadcrumb dir={folderView} onOpenFolder={(dir) => void openFolder(dir)} />
+            ) : (
+              nb &&
+              book.activeId && (
+                <Breadcrumb
+                  dir={dirOf(book.activeId)}
+                  current={nb.title || baseOf(book.activeId)}
+                  onOpenFolder={(dir) => void openFolder(dir)}
+                />
+              )
+            )}
+            <span style={{ flex: 1 }} />
+            {/* 文件夹页上没有要保存的东西 */}
+            {folderView === null && nb && (
+              <span className="nx-save-state" data-kind={saveState.kind} title={setup.vaultPath}>
+                <span className="nx-save-dot" />
+                {saveState.text}
+              </span>
+            )}
+          </div>
           {linkNotice && <div className="nx-banner">{linkNotice}</div>}
           {book.error && <div className="nx-banner nx-banner-error">{book.error}</div>}
           {book.missingFile && (
@@ -817,7 +931,27 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
             </div>
           )}
 
-          {!nb ? (
+          {folderView !== null ? (
+            <FolderPage
+              dir={folderView}
+              notes={book.refs}
+              folders={book.folders}
+              summaryOf={links.summaryOf}
+              canCreateFolder={depthOf(folderView) < MAX_DIR_DEPTH}
+              onOpenNote={(id) => void openNote(id)}
+              onOpenFolder={(dir) => void openFolder(dir)}
+              onCreateNote={(dir) => void createNote('未命名笔记', dir)}
+              onCreateFolder={askCreateFolder}
+              onFolderMenu={openFolderMenu}
+              onNoteMenu={openNoteMenu}
+              onDragStart={setDragNoteId}
+              onDragEnd={() => {
+                setDragNoteId(null);
+                setDropDir(null);
+              }}
+              onDropNote={dropNoteInto}
+            />
+          ) : !nb ? (
             <div style={{ color: 'var(--nx-fg-faint)', fontSize: 13, padding: '20px 0' }}>
               正在打开笔记…
             </div>
@@ -939,7 +1073,7 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
                   currentNoteId={book.activeId}
                   active={cell.id === activeCellId}
                   onActivate={() => setActiveCellId(cell.id)}
-                  onMenu={(x, y) => openCellMenu(cell.id, x, y)}
+                  onMenu={(x, y, align) => openCellMenu(cell.id, x, y, align)}
                   dropActive={!!dragId && dropId === cell.id}
                   onSource={(v) => book.update(ops.setSource(cell.id, v))}
                   onLang={(l) => book.update(ops.setLang(cell.id, l))}
@@ -1009,10 +1143,7 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
               <Backlinks
                 backlinks={links.backlinksOf(book.activeId)}
                 ready={links.ready}
-                onOpen={(id) => {
-                  setEditingId(null);
-                  void book.open(id);
-                }}
+                onOpen={(id) => void openNote(id)}
               />
             </>
           )}

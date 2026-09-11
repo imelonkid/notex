@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { NotebookRef } from '@core/store/index';
 import { baseOf, compareNames, dirOf, joinId } from '@core/store/paths';
+import { FolderIcon, NoteIcon } from './icons';
 
 /** 每层缩进的像素，参考线画在上一层的位置 */
 const INDENT = 14;
@@ -20,11 +21,16 @@ interface Props {
   notes: NotebookRef[];
   folders: string[];
   activeId: string | null;
+  /** 正在看的文件夹页，没有打开文件夹页时为 null */
+  activeDir: string | null;
   expanded: Set<string>;
   dragId: string | null;
   /** 拖拽悬停的目标目录，null 表示没有 */
   dropDir: string | null;
+  /** 只展开或收起，由左侧的三角触发 */
   onToggle(dir: string): void;
+  /** 点文件夹这一行：打开文件夹页 */
+  onOpenFolder(dir: string): void;
   onOpen(id: string): void;
   onNoteMenu(id: string, x: number, y: number): void;
   onRename(id: string, title: string): void;
@@ -159,6 +165,7 @@ export function NoteTree(props: Props) {
         }}
         title={ref.id}
       >
+        <NoteIcon />
         <span className="nx-nb-title">{ref.title || '未命名笔记'}</span>
       </div>
       ),
@@ -174,7 +181,9 @@ export function NoteTree(props: Props) {
           data-drop={isTarget}
           style={indentStyle(depth)}
           data-depth={depth}
-          onClick={() => props.onToggle(node.dir)}
+          data-dir={node.dir}
+          data-active={props.activeDir === node.dir}
+          onClick={() => props.onOpenFolder(node.dir)}
           onContextMenu={(e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -184,11 +193,21 @@ export function NoteTree(props: Props) {
           onDrop={(e) => handleDrop(e, node.dir)}
           title={node.dir}
         >
-          <span className="nx-folder-caret" data-open={open}>
+          <button
+            className="nx-folder-caret"
+            data-open={open}
+            aria-label={open ? `收起「${node.name}」` : `展开「${node.name}」`}
+            aria-expanded={open}
+            onClick={(e) => {
+              // 三角只管展开收起，不打开文件夹页
+              e.stopPropagation();
+              props.onToggle(node.dir);
+            }}
+          >
             ›
-          </span>
+          </button>
+          <FolderIcon open={open} />
           <span className="nx-nb-title">{node.name}</span>
-          <span className="nx-folder-count">{node.notes.length || ''}</span>
         </div>
         {open && (
           <>

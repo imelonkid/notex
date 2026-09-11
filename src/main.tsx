@@ -3,7 +3,8 @@ import { createRoot } from 'react-dom/client';
 import './ui/theme/tokens.css';
 import './ui/theme/app.css';
 import { App } from './ui/App';
-import { ThemeProvider, useTheme, type ThemePack } from './ui/theme/ThemeProvider';
+import { BUILTIN_IDS, ThemeProvider, bootstrapTheme, useTheme, type ThemeIssue } from './ui/theme/ThemeProvider';
+import { parseTheme, type Theme } from './core/theme';
 import { RuntimeProvider } from './ui/RuntimeContext';
 import { detectHost } from './host/DevServerHost';
 import type { HostBridge } from './host/HostBridge';
@@ -12,51 +13,84 @@ import { RootBoundary } from './ui/components/CellBoundary';
 import { attachDebugSink, debug, installGlobalErrorLog } from './core/debug';
 
 /**
- * 加载主题包。优先问宿主，它会合并内置 themes/ 与用户 ~/.notex/themes/；
- * 纯浏览器模式下退回打包进来的内置主题。
+ * 读取用户主题（~/.notex/themes/*.json）。内置主题在 ThemeProvider 里同步加载，不经过这里。
+ *
+ * 每个文件都过主题协议的校验：不合法的字段丢掉，整个不合法的文件跳过，
+ * 问题原样交给设置界面列出来——JSON 写错被静默忽略是写主题时最恼人的事。
  */
 function ThemeLoader({ host, children }: { host: HostBridge | null; children: React.ReactNode }) {
-  const { registerPack } = useTheme();
+  const { setUserThemes } = useTheme();
 
   useEffect(() => {
     let cancelled = false;
-    const add = (pack: ThemePack) => !cancelled && registerPack(pack);
+    // 切回窗口会反复读，结果没变就别重复记日志
+    let lastReport = '';
 
-    // 内置主题打包进了 JS，任何宿主下都可用
-    const loadBundled = () => {
-      const modules = import.meta.glob<{ default: ThemePack }>('../themes/*.json');
-      for (const load of Object.values(modules)) void load().then((m) => add(m.default));
-    };
-
-    // 用户放在 ~/.notex/themes 里的主题，需要文件能力
     const loadUserThemes = async () => {
       if (!host) return;
+      const themes: Theme[] = [];
+      const issues: ThemeIssue[] = [];
+      let dir = '';
       try {
-        const dir = host.joinPath(await host.homeDir(), '.notex', 'themes');
+        dir = host.joinPath(await host.homeDir(), '.notex', 'themes');
         for (const entry of await host.listDir(dir)) {
           if (entry.isDir || !entry.name.endsWith('.json')) continue;
+          const note = (message: string) => {
+            issues.push({ source: entry.name, message });
+          };
+          let raw: unknown;
           try {
-            const pack = JSON.parse(await host.readText(host.joinPath(dir, entry.name))) as ThemePack;
-            if (typeof pack.css === 'string' && !pack.css.includes('{')) {
-              pack.css = await host.readText(host.joinPath(dir, pack.css)).catch(() => '');
-            }
-            if (pack.id) add(pack);
-          } catch {
-            // 单个主题坏了不影响其它
+            raw = JSON.parse(await host.readText(host.joinPath(dir, entry.name)));
+          } catch (e) {
+            note(`读不了或不是合法的 JSON：${String((e as Error)?.message ?? e)}`);
+            continue;
           }
+          const result = parseTheme(raw);
+          result.warnings.forEach(note);
+          if (!result.ok) {
+            note(`整个文件未加载：${result.error}`);
+            continue;
+          }
+          const { theme } = result;
+          if (BUILTIN_IDS.has(theme.id)) {
+            note(`id "${theme.id}" 和内置主题重复，未加载`);
+            continue;
+          }
+          if (themes.some((t) => t.id === theme.id)) {
+            note(`id "${theme.id}" 和另一个主题文件重复，未加载`);
+            continue;
+          }
+          themes.push(theme);
         }
       } catch {
         // 目录不存在是常态
       }
+      if (cancelled) return;
+
+      const report = JSON.stringify({ ids: themes.map((t) => t.id), issues });
+      if (report !== lastReport) {
+        lastReport = report;
+        for (const issue of issues) debug.warn('theme', `${issue.source}：${issue.message}`);
+        debug.log('theme', '读取用户主题', { dir, loaded: themes.length, issues: issues.length });
+      }
+      setUserThemes(themes, issues);
     };
 
-    loadBundled();
     void loadUserThemes();
+
+    // 改完主题文件切回应用就生效，不必重启——写主题时要反复看效果
+    const onBack = () => {
+      if (document.visibilityState === 'visible') void loadUserThemes();
+    };
+    window.addEventListener('focus', onBack);
+    document.addEventListener('visibilitychange', onBack);
 
     return () => {
       cancelled = true;
+      window.removeEventListener('focus', onBack);
+      document.removeEventListener('visibilitychange', onBack);
     };
-  }, [registerPack, host]);
+  }, [setUserThemes, host]);
 
   return <>{children}</>;
 }
@@ -134,6 +168,8 @@ function migrateLegacyStorage() {
 
 migrateLegacyStorage();
 installGlobalErrorLog();
+// 先同步上色再渲染，避免启动时闪一下没有颜色的界面
+bootstrapTheme();
 
 const container = document.getElementById('root')!;
 

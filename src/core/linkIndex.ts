@@ -1,4 +1,5 @@
 import { type LinkTarget, classifyLink, resolveNoteLink, safeDecode } from './links';
+import { type NoteSummary, summarizeMarkdown } from './noteSummary';
 import { dirOf } from './store/paths';
 
 /**
@@ -77,6 +78,8 @@ interface Entry {
   links: OutLink[];
   /** 建索引时文件的修改时间，用于增量更新 */
   stamp: string;
+  /** 列表页用的摘要与代码语言。反正已经读了全文，顺带算出来 */
+  summary: NoteSummary;
 }
 
 export class LinkIndex {
@@ -96,7 +99,7 @@ export class LinkIndex {
       hash: l.hash,
       resolved: resolveNoteLink(l.target, this.notes, fromDir),
     }));
-    this.entries.set(id, { links, stamp });
+    this.entries.set(id, { links, stamp, summary: summarizeMarkdown(markdown) });
   }
 
   remove(id: string): void {
@@ -133,6 +136,10 @@ export class LinkIndex {
       }));
       this.entries.set(id, entry);
     }
+  }
+
+  summaryOf(id: string): NoteSummary | undefined {
+    return this.entries.get(id)?.summary;
   }
 
   outLinks(id: string): OutLink[] {

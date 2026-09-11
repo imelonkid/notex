@@ -1,0 +1,389 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$comment": "本文件由 pnpm theme:docs 根据 src/core/theme.ts 生成，请勿手改",
+  "title": "NoteX 主题",
+  "description": "主题只能改颜色、字体、字重和标题比例。说明见 docs/THEME.md",
+  "type": "object",
+  "required": [
+    "notex-theme",
+    "id",
+    "name",
+    "appearance"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "notex-theme": {
+      "const": 1,
+      "description": "主题协议版本"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
+      "description": "唯一标识：小写字母、数字、连字符，不能和内置主题重复"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 40,
+      "description": "在设置里显示的名字"
+    },
+    "author": {
+      "type": "string",
+      "maxLength": 80
+    },
+    "appearance": {
+      "enum": [
+        "light",
+        "dark"
+      ],
+      "description": "这是浅色还是深色主题；没写的字段从同明暗的默认主题继承"
+    },
+    "colors": {
+      "type": "object",
+      "description": "颜色",
+      "additionalProperties": false,
+      "properties": {
+        "bg": {
+          "type": "string",
+          "pattern": "^(#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|(rgb|rgba|hsl|hsla)\\(\\s*[-+0-9.%\\s,/]+\\)|transparent)$",
+          "description": "页面底色"
+        },
+        "bg-subtle": {
+          "type": "string",
+          "pattern": "^(#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|(rgb|rgba|hsl|hsla)\\(\\s*[-+0-9.%\\s,/]+\\)|transparent)$",
+          "description": "次一档的底色：代码块、侧栏"
+        },
+        "bg-hover": {
+          "type": "string",
+          "pattern": "^(#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|(rgb|rgba|hsl|hsla)\\(\\s*[-+0-9.%\\s,/]+\\)|transparent)$",
+          "description": "悬停时的底色"
+        },
+        "bg-active": {
+          "type": "string",
+          "pattern": "^(#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|(rgb|rgba|hsl|hsla)\\(\\s*[-+0-9.%\\s,/]+\\)|transparent)$",
+          "description": "选中项的底色"
+        },
+        "border": {
+          "type": "string",
+          "pattern": "^(#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|(rgb|rgba|hsl|hsla)\\(\\s*[-+0-9.%\\s,/]+\\)|transparent)$",
+          "description": "分隔线与弱描边"
+        },
+        "border-strong": {
+          "type": "string",
+          "pattern": "^(#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|(rgb|rgba|hsl|hsla)\\(\\s*[-+0-9.%\\s,/]+\\)|transparent)$",
+          "description": "输入框、按钮等强描边"
+        },
+        "fg": {
+          "type": "string",
+          "pattern": "^(#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|(rgb|rgba|hsl|hsla)\\(\\s*[-+0-9.%\\s,/]+\\)|transparent)$",
+          "description": "主文字，也是最深的一档"
+        },
+        "fg-soft": {
+          "type": "string",
+          "pattern": "^(#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|(rgb|rgba|hsl|hsla)\\(\\s*[-+0-9.%\\s,/]+\\)|transparent)$",
+          "description": "次一档"
+        },
+        "fg-muted": {
+          "type": "string",
+          "pattern": "^(#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|(rgb|rgba|hsl|hsla)\\(\\s*[-+0-9.%\\s,/]+\\)|transparent)$",
+          "description": "说明文字"
+        },
+        "fg-faint": {
+          "type": "string",
+          "pattern": "^(#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|(rgb|rgba|hsl|hsla)\\(\\s*[-+0-9.%\\s,/]+\\)|transparent)$",
+          "description": "更弱：占位、提示"
+        },
+        "fg-ghost": {
+          "type": "string",
+          "pattern": "^(#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|(rgb|rgba|hsl|hsla)\\(\\s*[-+0-9.%\\s,/]+\\)|transparent)$",
+          "description": "最弱：图标、行号"
+        },
+        "fg-invert": {
+          "type": "string",
+          "pattern": "^(#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|(rgb|rgba|hsl|hsla)\\(\\s*[-+0-9.%\\s,/]+\\)|transparent)$",
+          "description": "深色按钮上的文字"
+        },
+        "accent": {
+          "type": "string",
+          "pattern": "^(#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|(rgb|rgba|hsl|hsla)\\(\\s*[-+0-9.%\\s,/]+\\)|transparent)$",
+          "description": "强调色"
+        },
+        "danger": {
+          "type": "string",
+          "pattern": "^(#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|(rgb|rgba|hsl|hsla)\\(\\s*[-+0-9.%\\s,/]+\\)|transparent)$",
+          "description": "危险、出错"
+        },
+        "warn": {
+          "type": "string",
+          "pattern": "^(#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|(rgb|rgba|hsl|hsla)\\(\\s*[-+0-9.%\\s,/]+\\)|transparent)$",
+          "description": "警告"
+        },
+        "success": {
+          "type": "string",
+          "pattern": "^(#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|(rgb|rgba|hsl|hsla)\\(\\s*[-+0-9.%\\s,/]+\\)|transparent)$",
+          "description": "成功"
+        },
+        "selection": {
+          "type": "string",
+          "pattern": "^(#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|(rgb|rgba|hsl|hsla)\\(\\s*[-+0-9.%\\s,/]+\\)|transparent)$",
+          "description": "选中文字的底色"
+        },
+        "shadow": {
+          "type": "string",
+          "pattern": "^(#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|(rgb|rgba|hsl|hsla)\\(\\s*[-+0-9.%\\s,/]+\\)|transparent)$",
+          "description": "菜单、弹层的阴影颜色"
+        },
+        "overlay": {
+          "type": "string",
+          "pattern": "^(#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|(rgb|rgba|hsl|hsla)\\(\\s*[-+0-9.%\\s,/]+\\)|transparent)$",
+          "description": "对话框背后的遮罩"
+        },
+        "syn-keyword": {
+          "type": "string",
+          "pattern": "^(#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|(rgb|rgba|hsl|hsla)\\(\\s*[-+0-9.%\\s,/]+\\)|transparent)$",
+          "description": "关键字"
+        },
+        "syn-string": {
+          "type": "string",
+          "pattern": "^(#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|(rgb|rgba|hsl|hsla)\\(\\s*[-+0-9.%\\s,/]+\\)|transparent)$",
+          "description": "字符串"
+        },
+        "syn-comment": {
+          "type": "string",
+          "pattern": "^(#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|(rgb|rgba|hsl|hsla)\\(\\s*[-+0-9.%\\s,/]+\\)|transparent)$",
+          "description": "注释"
+        },
+        "syn-number": {
+          "type": "string",
+          "pattern": "^(#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|(rgb|rgba|hsl|hsla)\\(\\s*[-+0-9.%\\s,/]+\\)|transparent)$",
+          "description": "数字"
+        },
+        "syn-type": {
+          "type": "string",
+          "pattern": "^(#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|(rgb|rgba|hsl|hsla)\\(\\s*[-+0-9.%\\s,/]+\\)|transparent)$",
+          "description": "类型"
+        },
+        "syn-function": {
+          "type": "string",
+          "pattern": "^(#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|(rgb|rgba|hsl|hsla)\\(\\s*[-+0-9.%\\s,/]+\\)|transparent)$",
+          "description": "函数名"
+        },
+        "syn-variable": {
+          "type": "string",
+          "pattern": "^(#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|(rgb|rgba|hsl|hsla)\\(\\s*[-+0-9.%\\s,/]+\\)|transparent)$",
+          "description": "变量"
+        },
+        "syn-operator": {
+          "type": "string",
+          "pattern": "^(#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|(rgb|rgba|hsl|hsla)\\(\\s*[-+0-9.%\\s,/]+\\)|transparent)$",
+          "description": "运算符"
+        },
+        "syn-punct": {
+          "type": "string",
+          "pattern": "^(#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|(rgb|rgba|hsl|hsla)\\(\\s*[-+0-9.%\\s,/]+\\)|transparent)$",
+          "description": "标点"
+        },
+        "editor-selection": {
+          "type": "string",
+          "pattern": "^(#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|(rgb|rgba|hsl|hsla)\\(\\s*[-+0-9.%\\s,/]+\\)|transparent)$",
+          "description": "编辑器里选中文字的底色"
+        },
+        "editor-active-line": {
+          "type": "string",
+          "pattern": "^(#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|(rgb|rgba|hsl|hsla)\\(\\s*[-+0-9.%\\s,/]+\\)|transparent)$",
+          "description": "光标所在行的底色"
+        },
+        "editor-bg": {
+          "type": "string",
+          "pattern": "^(#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|(rgb|rgba|hsl|hsla)\\(\\s*[-+0-9.%\\s,/]+\\)|transparent)$",
+          "description": "编辑器底色（没写时跟随 bg-subtle）"
+        },
+        "editor-caret": {
+          "type": "string",
+          "pattern": "^(#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|(rgb|rgba|hsl|hsla)\\(\\s*[-+0-9.%\\s,/]+\\)|transparent)$",
+          "description": "光标（没写时跟随 fg）"
+        },
+        "editor-gutter": {
+          "type": "string",
+          "pattern": "^(#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|(rgb|rgba|hsl|hsla)\\(\\s*[-+0-9.%\\s,/]+\\)|transparent)$",
+          "description": "行号（没写时跟随 fg-ghost）"
+        },
+        "title": {
+          "type": "string",
+          "pattern": "^(#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|(rgb|rgba|hsl|hsla)\\(\\s*[-+0-9.%\\s,/]+\\)|transparent)$",
+          "description": "笔记大标题的颜色（没写时跟随 fg）"
+        },
+        "md-text": {
+          "type": "string",
+          "pattern": "^(#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|(rgb|rgba|hsl|hsla)\\(\\s*[-+0-9.%\\s,/]+\\)|transparent)$",
+          "description": "正文（没写时跟随 fg-soft）"
+        },
+        "md-heading": {
+          "type": "string",
+          "pattern": "^(#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|(rgb|rgba|hsl|hsla)\\(\\s*[-+0-9.%\\s,/]+\\)|transparent)$",
+          "description": "标题与表头（没写时跟随 fg）"
+        },
+        "md-strong": {
+          "type": "string",
+          "pattern": "^(#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|(rgb|rgba|hsl|hsla)\\(\\s*[-+0-9.%\\s,/]+\\)|transparent)$",
+          "description": "加粗（没写时跟随 fg）"
+        },
+        "md-link": {
+          "type": "string",
+          "pattern": "^(#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|(rgb|rgba|hsl|hsla)\\(\\s*[-+0-9.%\\s,/]+\\)|transparent)$",
+          "description": "链接（没写时跟随 accent）"
+        },
+        "md-code": {
+          "type": "string",
+          "pattern": "^(#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|(rgb|rgba|hsl|hsla)\\(\\s*[-+0-9.%\\s,/]+\\)|transparent)$",
+          "description": "行内代码的文字（没写时跟随 danger）"
+        },
+        "md-code-bg": {
+          "type": "string",
+          "pattern": "^(#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|(rgb|rgba|hsl|hsla)\\(\\s*[-+0-9.%\\s,/]+\\)|transparent)$",
+          "description": "行内代码的底色（没写时跟随 bg-hover）"
+        },
+        "md-pre": {
+          "type": "string",
+          "pattern": "^(#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|(rgb|rgba|hsl|hsla)\\(\\s*[-+0-9.%\\s,/]+\\)|transparent)$",
+          "description": "代码块的文字（没写时跟随 fg）"
+        },
+        "md-pre-bg": {
+          "type": "string",
+          "pattern": "^(#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|(rgb|rgba|hsl|hsla)\\(\\s*[-+0-9.%\\s,/]+\\)|transparent)$",
+          "description": "代码块的底色（没写时跟随 bg-subtle）"
+        },
+        "md-pre-border": {
+          "type": "string",
+          "pattern": "^(#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|(rgb|rgba|hsl|hsla)\\(\\s*[-+0-9.%\\s,/]+\\)|transparent)$",
+          "description": "代码块的描边（没写时跟随 border）"
+        },
+        "md-quote": {
+          "type": "string",
+          "pattern": "^(#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|(rgb|rgba|hsl|hsla)\\(\\s*[-+0-9.%\\s,/]+\\)|transparent)$",
+          "description": "引用的文字（没写时跟随 fg-muted）"
+        },
+        "md-quote-border": {
+          "type": "string",
+          "pattern": "^(#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|(rgb|rgba|hsl|hsla)\\(\\s*[-+0-9.%\\s,/]+\\)|transparent)$",
+          "description": "引用左侧的竖线（没写时跟随 border-strong）"
+        },
+        "md-table-border": {
+          "type": "string",
+          "pattern": "^(#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|(rgb|rgba|hsl|hsla)\\(\\s*[-+0-9.%\\s,/]+\\)|transparent)$",
+          "description": "表格线（没写时跟随 border）"
+        },
+        "md-table-head-bg": {
+          "type": "string",
+          "pattern": "^(#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|(rgb|rgba|hsl|hsla)\\(\\s*[-+0-9.%\\s,/]+\\)|transparent)$",
+          "description": "表头底色（没写时跟随 bg-subtle）"
+        },
+        "md-rule": {
+          "type": "string",
+          "pattern": "^(#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|(rgb|rgba|hsl|hsla)\\(\\s*[-+0-9.%\\s,/]+\\)|transparent)$",
+          "description": "分隔线（没写时跟随 border）"
+        }
+      }
+    },
+    "fonts": {
+      "type": "object",
+      "description": "字体栈",
+      "additionalProperties": false,
+      "properties": {
+        "body": {
+          "type": "string",
+          "pattern": "^[^;{}()<>\\\\/*!\\u0000-\\u001f]{1,300}$",
+          "description": "界面与正文"
+        },
+        "mono": {
+          "type": "string",
+          "pattern": "^[^;{}()<>\\\\/*!\\u0000-\\u001f]{1,300}$",
+          "description": "代码"
+        },
+        "title": {
+          "type": "string",
+          "pattern": "^[^;{}()<>\\\\/*!\\u0000-\\u001f]{1,300}$",
+          "description": "展示用：笔记大标题、品牌名、对话框标题"
+        },
+        "heading": {
+          "type": "string",
+          "pattern": "^[^;{}()<>\\\\/*!\\u0000-\\u001f]{1,300}$",
+          "description": "Markdown 标题（没写时跟随 body）"
+        }
+      }
+    },
+    "typography": {
+      "type": "object",
+      "description": "字重与标题比例",
+      "additionalProperties": false,
+      "properties": {
+        "title-weight": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 900,
+          "multipleOf": 100,
+          "description": "笔记大标题"
+        },
+        "heading-weight": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 900,
+          "multipleOf": 100,
+          "description": "Markdown 标题"
+        },
+        "strong-weight": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 900,
+          "multipleOf": 100,
+          "description": "加粗与表头"
+        },
+        "h1": {
+          "type": "number",
+          "minimum": 0.75,
+          "maximum": 3,
+          "description": "一级标题是正文字号的几倍"
+        },
+        "h2": {
+          "type": "number",
+          "minimum": 0.75,
+          "maximum": 3,
+          "description": "二级标题"
+        },
+        "h3": {
+          "type": "number",
+          "minimum": 0.75,
+          "maximum": 3,
+          "description": "三级标题"
+        },
+        "h4": {
+          "type": "number",
+          "minimum": 0.75,
+          "maximum": 3,
+          "description": "四级标题"
+        },
+        "h5": {
+          "type": "number",
+          "minimum": 0.75,
+          "maximum": 3,
+          "description": "五级标题"
+        },
+        "h6": {
+          "type": "number",
+          "minimum": 0.75,
+          "maximum": 3,
+          "description": "六级标题"
+        },
+        "code-scale": {
+          "type": "number",
+          "minimum": 0.7,
+          "maximum": 1.2,
+          "description": "行内代码是正文字号的几倍"
+        }
+      }
+    }
+  }
+}

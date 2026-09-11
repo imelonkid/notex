@@ -284,76 +284,16 @@ view.dispatch({ effects: langCompartment.reconfigure(langSupport(cell.lang)) });
 
 ## 6. 主题系统
 
-### 6.1 设计原则
+> 这一节早期的设想（主题 = token + 可选 CSS 覆盖）已被取代。
+> 现行设计见 [THEME.md](THEME.md)，为什么这样划边界见 [RESEARCH-主题边界.md](RESEARCH-主题边界.md)。
 
-- 组件只消费 **design tokens**（CSS 变量），零硬编码颜色。可以加一条 stylelint 规则强制。
-- 主题 = 一组 token 取值 + 可选的少量 CSS 覆盖。主题不能改布局结构，只能改外观。
-- 内置 `light` / `dark` 两个主题，`auto` 跟随系统。
-
-### 6.2 Token 分层
-
-```css
-/* packages/ui/src/tokens.css —— 语义层，组件只用这一层 */
-:root {
-  /* 表面 */
-  --nx-bg: #fdfdfc;
-  --nx-bg-subtle: #f7f7f4;
-  --nx-bg-hover: #f2f2ee;
-  --nx-border: #e6e6e1;
-  --nx-border-strong: #d8d8d2;
-  /* 文字 */
-  --nx-fg: #1c1c1a;
-  --nx-fg-muted: #6f6f6a;
-  --nx-fg-faint: #a3a39c;
-  --nx-accent: #3f5a7d;
-  --nx-danger: #9c3423;
-  --nx-warn: #8a6d1f;
-  --nx-success: #4b7d5b;
-  /* 字体与形状 */
-  --nx-font-body: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-  --nx-font-heading: 'Newsreader', Georgia, serif;
-  --nx-font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-  --nx-radius: 4px;
-  --nx-content-width: 860px;
-  /* 代码高亮（供 CodeMirror HighlightStyle 读取） */
-  --nx-syn-keyword: #7c3aed;
-  --nx-syn-string: #15803d;
-  --nx-syn-comment: #8a8a84;
-  --nx-syn-number: #b45309;
-  --nx-syn-type: #0e7490;
-  --nx-syn-function: #1d4ed8;
-}
-```
-
-原型里的配色正好可以原样提炼成默认 `light` 主题。
-
-### 6.3 主题包格式
-
-```
-~/.notex/themes/
-  solarized/
-    theme.json
-    theme.css      (可选)
-```
-
-```jsonc
-// theme.json
-{
-  "id": "solarized",
-  "name": "Solarized Light",
-  "appearance": "light",            // light | dark，用于 auto 模式匹配
-  "tokens": {
-    "bg": "#fdf6e3", "fg": "#657b83", "accent": "#268bd2",
-    "syn-keyword": "#859900", "syn-string": "#2aa198"
-  },
-  "fonts": { "heading": "'Iowan Old Style', serif" },
-  "css": "theme.css"                // 可选，用于覆盖 .nx-md 里的排版细节
-}
-```
-
-加载方式：`ThemeProvider` 读取 JSON，生成 `[data-theme="solarized"] { --nx-bg: … }` 注入一个 `<style>` 标签，再把 `theme.css` 追加进去。CodeMirror 的 `HighlightStyle` 从 `--nx-syn-*` 变量生成，Markdown 渲染区的代码块也走同一套变量，这样三处高亮永远一致。
-
-主题只需要提供它想改的 token，其余从同 appearance 的内置主题继承。
+- **原则**：稳定可控、有限度的灵活。主题只能改颜色、字体、字重、标题比例；不能带 CSS 或脚本，不能改尺寸、间距、布局
+- **协议字段表**在 `src/core/theme.ts`，是唯一数据源：校验、合并、生成 `docs/THEME-REFERENCE.md` 与 `docs/theme.schema.json` 都用它，测试保证文档不脱节
+- **公开与内部分离**：主题只写协议字段，由框架映射到内部 CSS 变量；组件只消费 CSS 变量，零硬编码颜色
+- **校验是安全边界**：值会写进 `<style>`，所以按类型白名单校验，不合法的字段直接丢弃
+- **默认主题也是主题文件**：`themes/light.json`、`themes/dark.json`。其他主题没写的基础字段从同明暗的默认主题继承，派生字段跟随另一个字段
+- **选择模型**：固定一个主题，或跟随系统（浅色时 A、深色时 B）
+- **字号是用户设置**，不属于主题；主题里的标题字号是相对正文的倍数
 
 ## 7. 仓库结构
 

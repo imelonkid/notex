@@ -1,8 +1,10 @@
 {
+  "$schema": "../docs/theme.schema.json",
+  "notex-theme": 1,
   "id": "nord",
   "name": "Nord Dark",
   "appearance": "dark",
-  "tokens": {
+  "colors": {
     "bg": "#2e3440",
     "bg-subtle": "#3b4252",
     "bg-hover": "#434c5e",

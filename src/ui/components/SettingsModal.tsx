@@ -3,9 +3,7 @@ import { LANGS } from '@core/model';
 import { defaultVault, setVault } from '@core/config';
 import type { StoreSetup } from '@core/store/index';
 import { useRuntimes } from '../RuntimeContext';
-import { useTheme, type ThemeMode } from '../theme/ThemeProvider';
-
-const MODE_LABEL: Record<ThemeMode, string> = { light: '浅色', dark: '深色', auto: '跟随系统' };
+import { ThemeSettings } from './ThemeSettings';
 
 const STATUS_LABEL: Record<string, string> = {
   unknown: '未检测',
@@ -26,7 +24,6 @@ interface Props {
 
 export function SettingsModal({ setup, onVaultChanged, onClose }: Props) {
   const { registry, revision, host } = useRuntimes();
-  const { mode, setMode, packs, packId, setPack } = useTheme();
   const [paths, setPaths] = useState<Record<string, string>>({});
   const [detecting, setDetecting] = useState(false);
   const [vaultInput, setVaultInput] = useState(setup.isDefaultVault ? '' : setup.vaultPath);
@@ -149,32 +146,7 @@ export function SettingsModal({ setup, onVaultChanged, onClose }: Props) {
           )}
         </div>
 
-        <div className="nx-field">
-          <div className="nx-field-label">外观</div>
-          <div className="nx-seg">
-            {(['light', 'dark', 'auto'] as ThemeMode[]).map((m) => (
-              <button key={m} data-active={mode === m} onClick={() => setMode(m)}>
-                {MODE_LABEL[m]}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {packs.length > 0 && (
-          <div className="nx-field">
-            <div className="nx-field-label">主题包</div>
-            <div className="nx-seg">
-              <button data-active={packId === null} onClick={() => setPack(null)}>
-                默认
-              </button>
-              {packs.map((p) => (
-                <button key={p.id} data-active={packId === p.id} onClick={() => setPack(p.id)}>
-                  {p.name}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+        <ThemeSettings />
 
         <div className="nx-field">
           <div className="nx-field-label" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

@@ -1,0 +1,23 @@
+{
+  "$schema": "../../docs/theme.schema.json",
+  "notex-theme": 1,
+  "id": "ink",
+  "name": "墨水（示例）",
+  "appearance": "light",
+  "colors": {
+    "md-text": "#2b2b28",
+    "md-code": "#1f5f8b",
+    "md-code-bg": "#eef3f7",
+    "md-quote": "#5b5b55",
+    "md-quote-border": "#1c1c1a",
+    "md-table-head-bg": "#f1efe8"
+  },
+  "fonts": {
+    "heading": "'Newsreader', Georgia, 'Songti SC', serif"
+  },
+  "typography": {
+    "heading-weight": 900,
+    "h1": 1.87,
+    "h2": 1.47
+  }
+}

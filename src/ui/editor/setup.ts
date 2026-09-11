@@ -18,6 +18,7 @@ import {
   highlightActiveLine,
   highlightSpecialChars,
   keymap,
+  lineNumbers,
   rectangularSelection,
 } from '@codemirror/view';
 import { tags as t } from '@lezer/highlight';
@@ -57,6 +58,20 @@ export const xnbEditorTheme = EditorView.theme({
     backgroundColor: 'var(--nx-editor-selection)',
   },
   '.cm-activeLine': { backgroundColor: 'var(--nx-editor-active-line)' },
+  // 行号是给人对错误位置用的，不该抢正文的注意力
+  '.cm-gutters': {
+    backgroundColor: 'transparent',
+    border: 'none',
+    color: 'var(--nx-editor-gutter)',
+  },
+  '.cm-lineNumbers .cm-gutterElement': {
+    padding: '0 8px 0 12px',
+    minWidth: '30px',
+  },
+  '.cm-gutters .cm-activeLineGutter': {
+    backgroundColor: 'transparent',
+    color: 'var(--nx-fg-muted)',
+  },
   '.cm-scroller': { fontFamily: 'var(--nx-font-mono)', overflow: 'auto' },
   '.cm-matchingBracket, &.cm-focused .cm-matchingBracket': {
     backgroundColor: 'var(--nx-bg-active)',
@@ -150,6 +165,9 @@ export const langCompartment = new Compartment();
 export function buildExtensions(opts: CellEditorOptions): Extension[] {
   return [
     history(),
+    // JShell 的编译错误不带行号，只说"illegal start of expression"，
+    // 所以这里的行号比在普通编辑器里更值钱
+    lineNumbers(),
     drawSelection(),
     highlightSpecialChars(),
     highlightActiveLine(),

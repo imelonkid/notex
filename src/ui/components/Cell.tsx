@@ -4,9 +4,10 @@ import {
   LANGS,
   type Cell as CellModel,
   type LangId,
-  type RunMark,
+  type RunRecord,
   cellBadge,
   cellStatus,
+  formatDuration,
 } from '@core/model';
 import { expandWikiLinks, safeDecode } from '@core/links';
 import { sanitizeMarkdown } from '../sanitize';
@@ -22,7 +23,7 @@ interface Props {
   editing: boolean;
   running: boolean;
   /** 本次会话里这个 cell 的执行结果，未运行则没有 */
-  mark?: RunMark;
+  mark?: RunRecord;
   /** 运行中的额外说明，例如"正在解析依赖…" */
   busyNote?: string;
   /** 判断一个站内链接是否解析不到目标 */
@@ -34,7 +35,7 @@ interface Props {
   /** 当前 cell，工具栏和快捷键作用于它 */
   active: boolean;
   onActivate(): void;
-  onMenu(x: number, y: number): void;
+  onMenu(x: number, y: number, align?: 'left' | 'right'): void;
   onSource(value: string): void;
   onLang(lang: LangId): void;
   onRun(): void;
@@ -133,6 +134,20 @@ function LangChip({ current, onPick }: { current: LangId; onPick(l: LangId): voi
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+/** 结果条：运行完成后贴在输出上方，回答"这次怎么样、跑了多久" */
+function RunSummary({ status, ms }: { status: string; ms?: number }) {
+  const label =
+    status === 'ok' ? '运行成功' : status === 'error' ? '运行出错' : status === 'aborted' ? '已中断' : '';
+  if (!label) return null;
+  return (
+    <div className="nx-run-summary" data-status={status}>
+      <span className="nx-run-summary-dot" />
+      <span>{label}</span>
+      {ms !== undefined && <span className="nx-run-summary-ms">· {formatDuration(ms)}</span>}
     </div>
   );
 }
@@ -246,7 +261,27 @@ export function Cell(props: Props) {
           props.onMenu(e.clientX, e.clientY);
         }}
       >
-        <CopyButton copied={props.copied} onCopy={props.onCopy} />
+        <div className="nx-cell-tools">
+          <CopyButton copied={props.copied} onCopy={props.onCopy} />
+          <button
+            className="nx-cell-copy"
+            title="更多操作（也可以右键）"
+            aria-label="更多操作"
+            onClick={(e) => {
+              e.stopPropagation();
+              props.onActivate();
+              // 菜单贴着按钮左下角弹，不用鼠标位置，键盘触发时也对得上
+              const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+              props.onMenu(r.right, r.bottom + 4, 'right');
+            }}
+          >
+            <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">
+              <circle cx="3.2" cy="8" r="1.25" fill="currentColor" />
+              <circle cx="8" cy="8" r="1.25" fill="currentColor" />
+              <circle cx="12.8" cy="8" r="1.25" fill="currentColor" />
+            </svg>
+          </button>
+        </div>
 
         <div className="nx-gutter">
           <span
@@ -295,6 +330,10 @@ export function Cell(props: Props) {
                 <div className="nx-outputs" style={{ color: 'var(--nx-fg-muted)' }}>
                   {busyNote ?? (registry.get(cell.lang).status === 'starting' ? '正在启动内核…' : '运行中…')}
                 </div>
+              )}
+              {/* 没有输出时更该显示：否则跑完一个纯赋值的 cell，界面上什么都不动 */}
+              {!running && props.mark && (
+                <RunSummary status={props.mark.status} ms={props.mark.ms} />
               )}
               {!running && (
                 <Outputs

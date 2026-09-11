@@ -17,7 +17,8 @@ import {
 
 const FENCE_LANG: Record<LangId, string> = { java: 'java', python: 'python', js: 'javascript' };
 
-const LANG_BY_FENCE: Record<string, LangId> = {
+/** 围栏 info 串里的语言名 → LangId。解析笔记和列表页的语言标签共用这一张表 */
+export const LANG_BY_FENCE: Record<string, LangId> = {
   java: 'java',
   python: 'python',
   py: 'python',
