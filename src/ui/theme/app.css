@@ -2244,6 +2244,7 @@ button.nx-folder-caret:hover {
 }
 .nx-rt-install-row {
   display: flex;
+  flex-direction: column;
   gap: 12px;
   align-items: flex-start;
   padding: 10px 12px;
@@ -2282,13 +2283,42 @@ button.nx-folder-caret:hover {
 }
 .nx-rt-install-actions {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-  flex: none;
-  align-items: stretch;
+  flex-direction: row;
+  justify-content: flex-end;
+  gap: 8px;
+  width: 100%;
 }
 .nx-rt-install-actions .nx-btn-mini {
   text-align: center;
+}
+.nx-rt-install-file,
+.nx-rt-install-download {
+  min-height: 30px;
+  padding: 4px 11px;
+  border: 1px solid var(--nx-border-strong);
+  border-radius: var(--nx-radius-sm);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.nx-rt-install-file {
+  background: transparent;
+  color: var(--nx-fg-muted);
+}
+.nx-rt-install-download {
+  background: var(--nx-bg-active);
+  color: var(--nx-fg);
+}
+.nx-rt-install-file:hover,
+.nx-rt-install-download:hover {
+  border-color: var(--nx-fg-muted);
+  color: var(--nx-fg);
+}
+.nx-rt-install-file:disabled,
+.nx-rt-install-download:disabled {
+  cursor: default;
+  opacity: 0.45;
 }
 .nx-rt-progress {
   position: relative;

@@ -129,14 +129,14 @@ export function RuntimeInstall({ lang, host, catalog, onChanged }: Props) {
                 </button>
               ) : (
                 <>
-                  <button className="nx-btn-primary" disabled={busy || !build} onClick={() => void runInstall(r)}>
-                    {busy ? '安装中…' : '下载并安装'}
-                  </button>
                   {host.pickFile && (
-                    <button className="nx-btn-mini" disabled={busy} onClick={() => void runInstallFile(r)}>
-                      从文件安装…
+                    <button className="nx-rt-install-file" disabled={busy} onClick={() => void runInstallFile(r)}>
+                      选择本地包…
                     </button>
                   )}
+                  <button className="nx-rt-install-download" disabled={busy || !build} onClick={() => void runInstall(r)}>
+                    {busy ? '安装中…' : '下载安装'}
+                  </button>
                 </>
               )}
             </div>
