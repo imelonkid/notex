@@ -2135,12 +2135,22 @@ button.nx-folder-caret:hover {
   border-top: 1px solid var(--nx-border);
   background: var(--nx-bg-subtle);
 }
-.nx-rt-select-label {
-  display: block;
+.nx-rt-select-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   margin: 2px 0 6px;
+}
+.nx-rt-select-label {
   font-size: 11.5px;
   font-weight: 600;
   color: var(--nx-fg-muted);
+}
+.nx-rt-select-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
 }
 .nx-rt-select {
   width: 100%;
@@ -2217,12 +2227,6 @@ button.nx-folder-caret:hover {
 .nx-rt-option-reason {
   font-size: 11.5px;
   color: var(--nx-danger);
-}
-.nx-rt-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 10px;
 }
 /* 运行时设置改了但内核还没重启：圆点外套一圈警示环 */
 .nx-runtime-chip[data-restart] .nx-dot {

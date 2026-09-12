@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { LANGS, type LangId } from '@core/model';
 import { defaultVault, setVault } from '@core/config';
+import type { RuntimeStatus } from '@core/runtime/types';
 import type { StoreSetup } from '@core/store/index';
 import type { FontSizes, ThemeSelection } from '@core/theme';
 import { useRuntimes } from '../RuntimeContext';
 import { useTheme } from '../theme/ThemeProvider';
 import { useRuntimeCatalog } from '../useRuntimeCatalog';
 import { RuntimeInstall } from './RuntimeInstall';
-import { STATUS_WORD } from './RuntimeStrip';
 import { ThemeSettings } from './ThemeSettings';
 
 export type SettingsTab = 'vault' | 'appearance' | 'runtime';
@@ -20,6 +20,21 @@ const TABS: Array<{ id: Tab; label: string; hint: string }> = [
 ];
 
 const TAB_KEY = 'nx.settings.tab';
+
+/** 设置页只回答运行时能否使用；启动和执行状态由侧栏状态区展示。 */
+const SETTINGS_RUNTIME_STATUS: Record<RuntimeStatus, string> = {
+  unknown: '未检测',
+  detecting: '检测中',
+  available: '可用',
+  missing: '未安装',
+  starting: '可用',
+  ready: '可用',
+  busy: '可用',
+  error: '异常',
+};
+
+const settingsRuntimeDot = (status: RuntimeStatus): RuntimeStatus =>
+  ['available', 'starting', 'ready', 'busy'].includes(status) ? 'ready' : status;
 
 function readTab(): Tab {
   try {
@@ -329,12 +344,12 @@ export function SettingsModal({ setup, initialTab, onVaultChanged, onClose }: Pr
                         aria-controls={`nx-runtime-${l.id}`}
                         onClick={() => setExpandedRuntime(expanded ? null : l.id)}
                       >
-                        <span className="nx-dot" data-status={state.status} />
+                        <span className="nx-dot" data-status={settingsRuntimeDot(state.status)} />
                         <span className="nx-rt-summary-main">
                           <span className="nx-rt-summary-line">
                             <span className="nx-rt-name">{l.label}</span>
                             <span className="nx-rt-status">
-                              {STATUS_WORD[state.status]}
+                              {state.restartNeeded ? '待重启' : SETTINGS_RUNTIME_STATUS[state.status]}
                               {state.info?.version ? ` · ${state.info.version}` : ''}
                             </span>
                           </span>
@@ -358,7 +373,19 @@ export function SettingsModal({ setup, initialTab, onVaultChanged, onClose }: Pr
                             </div>
                           )}
 
-                          <label className="nx-rt-select-label" htmlFor={`nx-runtime-select-${l.id}`}>当前运行时</label>
+                          <div className="nx-rt-select-head">
+                            <label className="nx-rt-select-label" htmlFor={`nx-runtime-select-${l.id}`}>当前运行时</label>
+                            <div className="nx-rt-select-actions">
+                              {state.session?.alive && (
+                                <button className="nx-btn-mini" onClick={() => void registry.restart(l.id)}>
+                                  {state.restartNeeded ? '重启以应用' : '重启内核'}
+                                </button>
+                              )}
+                              <button className="nx-btn-mini" disabled={!!redetecting[l.id]} onClick={() => void redetect(l.id)}>
+                                {redetecting[l.id] ? '检测中…' : '重新检测'}
+                              </button>
+                            </div>
+                          </div>
                           <select
                             id={`nx-runtime-select-${l.id}`}
                             className="nx-rt-select"
@@ -424,17 +451,6 @@ export function SettingsModal({ setup, initialTab, onVaultChanged, onClose }: Pr
                               ))}
                             </div>
                           )}
-
-                          <div className="nx-rt-actions">
-                            <button className="nx-btn-mini" disabled={!!redetecting[l.id]} onClick={() => void redetect(l.id)}>
-                              {redetecting[l.id] ? '检测中…' : '重新检测'}
-                            </button>
-                            {state.session?.alive && (
-                              <button className="nx-btn-mini" onClick={() => void registry.restart(l.id)}>
-                                {state.restartNeeded ? '重启内核以应用' : '重启内核'}
-                              </button>
-                            )}
-                          </div>
                         </div>
                       )}
                     </div>
