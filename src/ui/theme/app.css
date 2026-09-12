@@ -2069,20 +2069,45 @@ button.nx-folder-caret:hover {
   padding: 12px 18px 14px 24px;
 }
 
-/* ---- 设置 › 运行时：候选列表 ---- */
+/* ---- 设置 › 运行时：折叠选择 ---- */
 .nx-rt-lang {
-  margin-bottom: 18px;
-  padding-bottom: 14px;
-  border-bottom: 1px solid var(--nx-border);
+  margin-bottom: 8px;
+  border: 1px solid var(--nx-border);
+  border-radius: var(--nx-radius-sm);
+  overflow: hidden;
 }
-.nx-rt-lang:last-of-type {
-  border-bottom: none;
+.nx-rt-lang[data-expanded] {
+  border-color: var(--nx-border-strong);
 }
-.nx-rt-head {
+.nx-rt-summary {
+  width: 100%;
   display: flex;
   align-items: center;
+  gap: 10px;
+  padding: 11px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--nx-fg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.nx-rt-summary:hover {
+  background: var(--nx-bg-hover);
+}
+.nx-rt-summary-main {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.nx-rt-summary-line {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
   gap: 8px;
-  margin-bottom: 6px;
 }
 .nx-rt-name {
   font-size: 13px;
@@ -2092,33 +2117,72 @@ button.nx-folder-caret:hover {
   font-size: 11.5px;
   color: var(--nx-fg-faint);
 }
-.nx-rt-list {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin-top: 6px;
+.nx-rt-choice {
+  flex: none;
+  font-size: 11.5px;
+  color: var(--nx-fg-muted);
 }
-.nx-rt-option {
+.nx-rt-chevron {
+  color: var(--nx-fg-faint);
+  transform: rotate(0deg);
+  transition: transform 0.15s ease;
+}
+.nx-rt-lang[data-expanded] .nx-rt-chevron {
+  transform: rotate(180deg);
+}
+.nx-rt-panel {
+  padding: 12px;
+  border-top: 1px solid var(--nx-border);
+  background: var(--nx-bg-subtle);
+}
+.nx-rt-select-label {
+  display: block;
+  margin: 2px 0 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--nx-fg-muted);
+}
+.nx-rt-select {
+  width: 100%;
+  min-height: 36px;
+  padding: 0 34px 0 10px;
+  border: 1px solid var(--nx-border-strong);
+  border-radius: var(--nx-radius-sm);
+  background: var(--nx-bg);
+  color: var(--nx-fg);
+  font: inherit;
+  font-size: 12.5px;
+}
+.nx-rt-advanced-toggle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 10px;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  color: var(--nx-fg-muted);
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.nx-rt-advanced-toggle:hover {
+  color: var(--nx-fg);
+}
+.nx-rt-advanced {
+  margin-top: 4px;
+}
+.nx-rt-candidate-detail {
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  padding: 6px 10px;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--nx-border);
   border-radius: var(--nx-radius-sm);
-  cursor: pointer;
 }
-.nx-rt-option:hover {
-  background: var(--nx-bg-hover);
-}
-.nx-rt-option[data-checked='true'] {
-  background: var(--nx-bg-active);
-}
-.nx-rt-option[data-disabled] {
-  cursor: default;
-  opacity: 0.6;
-}
-.nx-rt-option input[type='radio'] {
-  margin: 3px 0 0;
-  flex: none;
+.nx-rt-candidate-detail[data-invalid] {
+  opacity: 0.72;
 }
 .nx-rt-option-main {
   display: flex;
@@ -2134,11 +2198,13 @@ button.nx-folder-caret:hover {
   gap: 8px;
 }
 .nx-rt-option-source {
-  font-size: 11px;
-  color: var(--nx-fg-muted);
+  flex: none;
+  padding: 0 7px;
   border: 1px solid var(--nx-border-strong);
   border-radius: 999px;
-  padding: 0 7px;
+  color: var(--nx-fg-muted);
+  font-size: 11px;
+  white-space: nowrap;
 }
 .nx-rt-option-sub {
   font-size: 11.5px;
@@ -2151,6 +2217,12 @@ button.nx-folder-caret:hover {
 .nx-rt-option-reason {
   font-size: 11.5px;
   color: var(--nx-danger);
+}
+.nx-rt-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
 }
 /* 运行时设置改了但内核还没重启：圆点外套一圈警示环 */
 .nx-runtime-chip[data-restart] .nx-dot {
@@ -2185,15 +2257,18 @@ button.nx-folder-caret:hover {
 }
 .nx-rt-install-title {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   gap: 8px;
   font-size: 13px;
   font-weight: 500;
 }
 .nx-rt-install-size {
+  flex: none;
   font-size: 11.5px;
   color: var(--nx-fg-faint);
   font-weight: 400;
+  white-space: nowrap;
 }
 .nx-rt-install-ok {
   font-size: 11px;

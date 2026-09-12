@@ -88,6 +88,10 @@ export function SettingsModal({ setup, initialTab, onVaultChanged, onClose }: Pr
   /** 待添加的手动路径，保存时验证并加入候选 */
   const [rtCustom, setRtCustom] = useState<Record<string, string>>({});
   const [redetecting, setRedetecting] = useState<Record<string, boolean>>({});
+  const [expandedRuntime, setExpandedRuntime] = useState<LangId | null>(() =>
+    LANGS.find((l) => ['missing', 'error'].includes(registry.get(l.id).status))?.id ?? null,
+  );
+  const [runtimeAdvanced, setRuntimeAdvanced] = useState<Record<string, boolean>>({});
   const currentVaultValue = setup.isDefaultVault ? '' : setup.vaultPath;
   const [vaultInput, setVaultInput] = useState(currentVaultValue);
   const [selection, setSelection] = useState<ThemeSelection>(theme.selection);
@@ -312,107 +316,126 @@ export function SettingsModal({ setup, initialTab, onVaultChanged, onClose }: Pr
                   const state = registry.get(l.id);
                   const want = rtSelected[l.id] ?? '';
                   const auto = state.candidates.find((c) => c.ok && c.path.includes('/.notex/runtimes/')) ?? state.candidates.find((c) => c.ok);
+                  const selected = want ? state.candidates.find((c) => c.path === want) : null;
+                  const expanded = expandedRuntime === l.id;
+                  const advanced = !!runtimeAdvanced[l.id];
+                  const advancedCandidates = state.candidates.filter((c) => c.source === '手动' || !c.ok);
                   return (
-                    <div key={l.id} className="nx-rt-lang">
-                      <div className="nx-rt-head">
+                    <div key={l.id} className="nx-rt-lang" data-expanded={expanded || undefined}>
+                      <button
+                        type="button"
+                        className="nx-rt-summary"
+                        aria-expanded={expanded}
+                        aria-controls={`nx-runtime-${l.id}`}
+                        onClick={() => setExpandedRuntime(expanded ? null : l.id)}
+                      >
                         <span className="nx-dot" data-status={state.status} />
-                        <span className="nx-rt-name">{l.label}</span>
-                        <span className="nx-rt-status">
-                          {STATUS_WORD[state.status]}
-                          {state.info?.version ? ` · ${state.info.version}` : ''}
-                        </span>
-                        <span style={{ flex: 1 }} />
-                        {state.session?.alive && (
-                          <button className="nx-btn-mini" onClick={() => void registry.restart(l.id)}>
-                            {state.restartNeeded ? '重启内核以应用' : '重启内核'}
-                          </button>
-                        )}
-                        <button className="nx-btn-mini" disabled={!!redetecting[l.id]} onClick={() => void redetect(l.id)}>
-                          {redetecting[l.id] ? '检测中…' : '重新检测'}
-                        </button>
-                      </div>
-                      {state.restartNeeded && (
-                        <div className="nx-runtime-detail" style={{ color: 'var(--nx-warn)' }}>
-                          运行时已更改，内核仍在用旧的跑，重启后生效。
-                        </div>
-                      )}
-                      {state.error && (
-                        <div className="nx-runtime-detail" style={{ color: 'var(--nx-danger)' }}>
-                          {state.error}
-                        </div>
-                      )}
-
-                      <div className="nx-rt-list" role="radiogroup" aria-label={`${l.label} 运行时`}>
-                        <label className="nx-rt-option" data-checked={want === ''}>
-                          <input type="radio" name={`rt-${l.id}`} checked={want === ''} onChange={() => setRtSelected((s) => ({ ...s, [l.id]: '' }))} />
-                          <span className="nx-rt-option-main">
-                            <span className="nx-rt-option-title">自动</span>
-                            <span className="nx-rt-option-sub">
-                              {auto ? `当前会选：${auto.source} ${auto.version ?? ''}` : '没有可用的候选'}
+                        <span className="nx-rt-summary-main">
+                          <span className="nx-rt-summary-line">
+                            <span className="nx-rt-name">{l.label}</span>
+                            <span className="nx-rt-status">
+                              {STATUS_WORD[state.status]}
+                              {state.info?.version ? ` · ${state.info.version}` : ''}
                             </span>
                           </span>
-                        </label>
-                        {state.candidates.map((c) => (
-                          <label key={c.path} className="nx-rt-option" data-checked={want === c.path} data-disabled={!c.ok || undefined}>
-                            <input
-                              type="radio"
-                              name={`rt-${l.id}`}
-                              disabled={!c.ok}
-                              checked={want === c.path}
-                              onChange={() => setRtSelected((s) => ({ ...s, [l.id]: c.path }))}
+                          <span className="nx-rt-choice">
+                            {want === '' ? '自动选择' : `${selected?.source ?? '指定'} · ${selected?.version ?? '未知版本'}`}
+                          </span>
+                        </span>
+                        <span className="nx-rt-chevron" aria-hidden="true">⌄</span>
+                      </button>
+
+                      {expanded && (
+                        <div className="nx-rt-panel" id={`nx-runtime-${l.id}`}>
+                          {state.restartNeeded && (
+                            <div className="nx-runtime-detail" style={{ color: 'var(--nx-warn)' }}>
+                              运行时已更改，内核仍在用旧的跑，重启后生效。
+                            </div>
+                          )}
+                          {state.error && (
+                            <div className="nx-runtime-detail" style={{ color: 'var(--nx-danger)' }}>
+                              {state.error}
+                            </div>
+                          )}
+
+                          <label className="nx-rt-select-label" htmlFor={`nx-runtime-select-${l.id}`}>当前运行时</label>
+                          <select
+                            id={`nx-runtime-select-${l.id}`}
+                            className="nx-rt-select"
+                            value={want}
+                            disabled={state.status === 'detecting' && state.candidates.length === 0}
+                            onChange={(e) => setRtSelected((s) => ({ ...s, [l.id]: e.target.value }))}
+                          >
+                            <option value="">
+                              {auto ? `自动（推荐）— ${auto.source} ${auto.version ?? ''}` : '自动（没有可用候选）'}
+                            </option>
+                            {state.candidates.map((c) => (
+                              <option key={c.path} value={c.path} disabled={!c.ok}>
+                                {c.source} · {c.version ?? '?'} — {c.path}
+                              </option>
+                            ))}
+                          </select>
+
+                          <div className="nx-rt-sub-label">内置运行时</div>
+                          {host.canSpawn ? (
+                            <RuntimeInstall
+                              lang={l.id}
+                              host={host}
+                              catalog={catalog}
+                              onChanged={() => {
+                                void registry.detect(l.id, true).then(() => {
+                                  setRtSelected((s) => ({ ...s, [l.id]: registry.get(l.id).selected ?? '' }));
+                                });
+                              }}
                             />
-                            <span className="nx-rt-option-main">
-                              <span className="nx-rt-option-title">
-                                {c.version ?? '?'}
-                                <span className="nx-rt-option-source">{c.source}</span>
-                              </span>
-                              <span className="nx-rt-option-sub" title={c.path}>
-                                {c.path}
-                              </span>
-                              {!c.ok && c.reason && <span className="nx-rt-option-reason">{c.reason}</span>}
-                            </span>
-                            {c.source === '手动' && (
-                              <button
-                                className="nx-btn-mini"
-                                title="从列表移除"
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  void removeCustom(l.id, c.path);
-                                }}
-                              >
-                                移除
+                          ) : (
+                            <div className="nx-rt-install-note">纯浏览器模式下无法安装。</div>
+                          )}
+
+                          <button
+                            type="button"
+                            className="nx-rt-advanced-toggle"
+                            aria-expanded={advanced}
+                            onClick={() => setRuntimeAdvanced((s) => ({ ...s, [l.id]: !s[l.id] }))}
+                          >
+                            高级设置 <span aria-hidden="true">{advanced ? '⌃' : '⌄'}</span>
+                          </button>
+                          {advanced && (
+                            <div className="nx-rt-advanced">
+                              <div className="nx-input-row">
+                                <input
+                                  className="nx-text-input"
+                                  placeholder={`添加 ${l.label} 可执行文件路径，保存时验证`}
+                                  value={rtCustom[l.id] ?? ''}
+                                  onChange={(e) => setRtCustom((c) => ({ ...c, [l.id]: e.target.value }))}
+                                />
+                              </div>
+                              {advancedCandidates.map((c) => (
+                                <div key={c.path} className="nx-rt-candidate-detail" data-invalid={!c.ok || undefined}>
+                                  <span className="nx-rt-option-main">
+                                    <span className="nx-rt-option-title">{c.source} · {c.version ?? '?'}</span>
+                                    <span className="nx-rt-option-sub" title={c.path}>{c.path}</span>
+                                    {c.reason && <span className="nx-rt-option-reason">{c.reason}</span>}
+                                  </span>
+                                  {c.source === '手动' && (
+                                    <button className="nx-btn-mini" onClick={() => void removeCustom(l.id, c.path)}>移除</button>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          <div className="nx-rt-actions">
+                            <button className="nx-btn-mini" disabled={!!redetecting[l.id]} onClick={() => void redetect(l.id)}>
+                              {redetecting[l.id] ? '检测中…' : '重新检测'}
+                            </button>
+                            {state.session?.alive && (
+                              <button className="nx-btn-mini" onClick={() => void registry.restart(l.id)}>
+                                {state.restartNeeded ? '重启内核以应用' : '重启内核'}
                               </button>
                             )}
-                          </label>
-                        ))}
-                        {state.status === 'detecting' && state.candidates.length === 0 && (
-                          <div className="nx-rt-option-sub" style={{ padding: '6px 10px' }}>检测中…</div>
-                        )}
-                      </div>
-
-                      <div className="nx-input-row" style={{ marginTop: 8 }}>
-                        <input
-                          className="nx-text-input"
-                          placeholder={`添加 ${l.label} 可执行文件路径，保存时验证`}
-                          value={rtCustom[l.id] ?? ''}
-                          onChange={(e) => setRtCustom((c) => ({ ...c, [l.id]: e.target.value }))}
-                        />
-                      </div>
-
-                      <div className="nx-rt-sub-label">内置运行时</div>
-                      {host.canSpawn ? (
-                        <RuntimeInstall
-                          lang={l.id}
-                          host={host}
-                          catalog={catalog}
-                          onChanged={() => {
-                            void registry.detect(l.id, true).then(() => {
-                              setRtSelected((s) => ({ ...s, [l.id]: registry.get(l.id).selected ?? '' }));
-                            });
-                          }}
-                        />
-                      ) : (
-                        <div className="nx-rt-install-note">纯浏览器模式下无法安装。</div>
+                          </div>
+                        </div>
                       )}
                     </div>
                   );
