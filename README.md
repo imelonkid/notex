@@ -312,3 +312,7 @@ docs/           架构设计与方案
 - [目录与超链方案](docs/PROPOSAL-目录与超链.md)
 - [cell 操作重构](docs/PROPOSAL-cell操作重构.md)
 - [执行序号调研](docs/RESEARCH-执行序号.md)
+
+## 许可
+
+[MIT](LICENSE)

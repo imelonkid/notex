@@ -2,6 +2,7 @@
 name = "notex"
 version = "0.1.0"
 description = "NoteX 可执行笔记"
+license = "MIT"
 edition = "2021"
 rust-version = "1.77"
 
