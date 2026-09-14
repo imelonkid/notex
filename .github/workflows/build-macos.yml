@@ -1,0 +1,141 @@
+# 构建 macOS 桌面客户端：Apple Silicon 与 Intel 各一份 dmg。
+#
+# 触发：推 v* 标签自动构建并发 Release；也可以手动触发只出产物不发布。
+# 两个架构都在 Apple Silicon runner 上交叉编译（Tauri 官方推荐的做法，
+# 比再开一台 Intel runner 稳定），产物未签名：没有 Apple 开发者证书时
+# 用户首次打开要右键 → 打开，或 `xattr -d com.apple.quarantine NoteX.app`。
+name: build-macos
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      release:
+        description: '同时发布到 GitHub Release（需要已存在的 tag）'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+env:
+  PNPM_VERSION: 10
+
+jobs:
+  check:
+    name: 类型检查与核心测试
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      # 内核集成测试要三种运行时，留给本机 `pnpm test`；这里只跑纯逻辑
+      - run: |
+          pnpm test:serialize && pnpm test:links && pnpm test:paths && pnpm test:index \
+          && pnpm test:theme && pnpm test:summary && pnpm test:session && pnpm test:isolation \
+          && pnpm test:catalog && pnpm test:paste && pnpm test:history
+
+  build:
+    name: 构建 ${{ matrix.label }}
+    needs: check
+    runs-on: macos-14
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            label: macOS Apple Silicon
+            suffix: macos-arm64
+          - target: x86_64-apple-darwin
+            label: macOS Intel
+            suffix: macos-x64
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: ${{ matrix.target }}
+
+      - name: Rust 单元测试
+        if: matrix.target == 'aarch64-apple-darwin'
+        run: pnpm test:rust
+
+      - name: 读取版本号
+        id: meta
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: 构建
+        # 配置里只出 .app，分发再加 dmg；未签名的 .app 直接放 Release 会被 GitHub 展平，只发 dmg
+        run: pnpm tauri build --target ${{ matrix.target }} --bundles app,dmg
+
+      - name: 整理产物
+        run: |
+          set -euo pipefail
+          out=dist-release; mkdir -p "$out"
+          ver=${{ steps.meta.outputs.version }}
+          dmg=$(ls src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg | head -1)
+          cp "$dmg" "$out/NoteX-$ver-${{ matrix.suffix }}.dmg"
+          # .app 打成 zip 备用：不想挂载 dmg 的人可以直接解压
+          ( cd src-tauri/target/${{ matrix.target }}/release/bundle/macos && ditto -c -k --keepParent NoteX.app "$GITHUB_WORKSPACE/$out/NoteX-$ver-${{ matrix.suffix }}.app.zip" )
+          ( cd "$out" && shasum -a 256 * > "SHA256SUMS-${{ matrix.suffix }}.txt" )
+          ls -la "$out"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: notex-${{ matrix.suffix }}
+          path: dist-release/*
+          if-no-files-found: error
+
+  release:
+    name: 发布到 GitHub Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: notex-*
+          path: dist-release
+          merge-multiple: true
+      - name: 合并校验文件
+        run: |
+          cd dist-release
+          cat SHA256SUMS-*.txt > SHA256SUMS.txt
+          rm SHA256SUMS-*.txt
+          ls -la
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+          body: |
+            macOS 桌面客户端，未经 Apple 签名与公证。首次打开：右键 NoteX.app → 打开；
+            或在终端执行 `xattr -d com.apple.quarantine /Applications/NoteX.app`。
+
+            - `*-macos-arm64.dmg`：Apple Silicon（M 系列芯片）
+            - `*-macos-x64.dmg`：Intel
+            - `SHA256SUMS.txt`：校验值
+          files: |
+            dist-release/*.dmg
+            dist-release/*.app.zip
+            dist-release/SHA256SUMS.txt

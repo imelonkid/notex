@@ -149,6 +149,8 @@ pnpm dev          # 打开 http://localhost:5173
 pnpm desktop:build   # → src-tauri/target/release/bundle/macos/NoteX.app
 ```
 
+也可以直接从 [Releases](https://github.com/imelonkid/notex/releases) 下载打包好的 dmg，Apple Silicon 和 Intel 各一份。安装包未经 Apple 签名，首次打开要右键 → 打开。推一个 `v*` 标签就会由 GitHub Actions 自动构建并发布。
+
 ### 按需安装语言环境
 
 只需安装你要使用的语言环境，缺少某一种不会影响其他语言的代码块。
