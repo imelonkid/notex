@@ -13,6 +13,7 @@ import { codeToFence, fenceToCode, notebookToMarkdown } from '@core/serialize';
 import type { NotebookRef, NotebookStore } from '@core/store/index';
 import { dirOf } from '@core/store/paths';
 import { WELCOME_TITLE, welcomeCells } from '@core/welcome';
+import { History } from '@core/history';
 
 /** 一次写盘的结果。调用方要能区分"存好了"和"没存成" */
 export type SaveResult = 'saved' | 'nothing' | 'conflict' | 'error' | 'missing';
@@ -26,23 +27,34 @@ interface LastSaved {
 
 const SAVE_DEBOUNCE_MS = 500;
 const WATCH_INTERVAL_MS = 2000;
-/** 结构操作的撤销深度。五十步足够找回一次误删，再多只是占内存 */
-const HISTORY_MAX = 50;
+/** 撤销深度。一百步够找回一次误删和一段误编辑，快照只是几十 KB */
+const HISTORY_MAX = 100;
 
 export interface UpdateOptions {
   /** 跳过防抖立即写盘 */
   immediate?: boolean;
-  /**
-   * 记入撤销栈。只给结构操作用（删除、移动、转换、换语言、插入），
-   * 打字不记：编辑器自己有撤销，两套栈叠在一起会互相打架。
-   */
+  /** 记入撤销栈，一步一条：删除、移动、转换、换语言、插入 */
   record?: boolean;
+  /**
+   * 记入撤销栈并按会话合并：文字编辑用，键是 cell id。
+   * 同一个 cell 里连续的改动只占一条，切到别的 cell 或 sealHistory() 后另起一条。
+   */
+  group?: string;
+}
+
+/** 两份快照的"编辑内容"是否相同：cell 的顺序、类型、语言、源码；输出不算 */
+function sameContent(a: Notebook, b: Notebook): boolean {
+  if (a.title !== b.title || a.cells.length !== b.cells.length) return false;
+  return a.cells.every((c, i) => {
+    const d = b.cells[i];
+    return c.id === d.id && c.type === d.type && c.source === d.source && (c.type !== 'code' || d.type !== 'code' || c.lang === d.lang);
+  });
 }
 
 /**
- * 把快照恢复回来时保留当前各 cell 的源码与输出。
- * 撤销「删除 B」时用户可能已经在 A 里又写了几行，那些不该跟着消失；
- * 快照只负责结构：有哪些 cell、什么顺序、什么类型和语言。
+ * 把快照恢复回来时保留当前各 cell 的运行结果。
+ * 运行不是编辑：撤销一次删除不该把后来跑出的输出也抹掉。
+ * 源码和结构都从快照来——编辑本身就在栈里。
  */
 function mergeSnapshot(snapshot: Notebook, current: Notebook): Notebook {
   const live = new Map(current.cells.map((c) => [c.id, c]));
@@ -50,11 +62,10 @@ function mergeSnapshot(snapshot: Notebook, current: Notebook): Notebook {
     ...current,
     cells: snapshot.cells.map((c) => {
       const cur = live.get(c.id);
-      if (!cur) return { ...c };
-      if (c.type === 'code' && cur.type === 'code') {
-        return { ...c, source: cur.source, outputs: cur.outputs, ranWith: cur.ranWith };
+      if (cur && c.type === 'code' && cur.type === 'code') {
+        return { ...c, outputs: cur.outputs, ranWith: cur.ranWith };
       }
-      return { ...c, source: cur.source };
+      return { ...c };
     }),
   };
 }
@@ -96,8 +107,8 @@ export function useNotebook(store: NotebookStore | null) {
    * 所以写盘前记下代数，写完只在代数没变时才算干净。
    */
   const generation = useRef(0);
-  /** 结构操作的撤销栈；换笔记时清空，它只对当前这篇有意义 */
-  const history = useRef<{ past: Notebook[]; future: Notebook[] }>({ past: [], future: [] });
+  /** 撤销栈；换笔记时清空，它只对当前这篇有意义。比较时不看输出：运行结果不算编辑 */
+  const history = useRef(new History<Notebook>(HISTORY_MAX, sameContent));
   const [historyRev, setHistoryRev] = useState(0);
   /** 回调里要读最新的选中项，state 会被闭包捕获成旧值 */
   const activeIdRef = useRef<string | null>(null);
@@ -226,8 +237,14 @@ export function useNotebook(store: NotebookStore | null) {
   }, [store, activeId]);
 
   const resetHistory = useCallback(() => {
-    history.current = { past: [], future: [] };
+    history.current.clear();
     setHistoryRev((r) => r + 1);
+  }, []);
+
+  /** 编辑会话封口：切 cell、退出编辑时调用，之后的改动另起一条 */
+  const sealHistory = useCallback(() => {
+    if (history.current.isOpen) debug.log('history', '会话封口', { depth: history.current.depth });
+    history.current.seal();
   }, []);
 
   /**
@@ -239,12 +256,13 @@ export function useNotebook(store: NotebookStore | null) {
     (fn: (draft: Notebook) => void, opts: UpdateOptions = {}) => {
       const current = nbRef.current;
       if (!current) return;
-      if (opts.record) {
-        const h = history.current;
-        h.past.push(current);
-        if (h.past.length > HISTORY_MAX) h.past.shift();
-        h.future = [];
-        setHistoryRev((r) => r + 1);
+      if (opts.record || opts.group) {
+        const before = history.current.depth;
+        history.current.record(current, opts.group);
+        if (history.current.depth !== before) {
+          debug.log('history', opts.group ? '新编辑会话' : '结构操作', { group: opts.group, depth: history.current.depth });
+          setHistoryRev((r) => r + 1);
+        }
       }
       const draft: Notebook = { ...current, cells: current.cells.map((c) => ({ ...c })) };
       fn(draft);
@@ -264,35 +282,37 @@ export function useNotebook(store: NotebookStore | null) {
     [flush, scheduleSave],
   );
 
-  /** 撤销上一步结构操作。返回是否真的撤销了什么 */
+  const restore = useCallback(
+    (snapshot: Notebook, current: Notebook) => {
+      const restored = mergeSnapshot(snapshot, current);
+      restored.updated = new Date().toISOString();
+      nbRef.current = restored;
+      setNb(restored);
+      setHistoryRev((r) => r + 1);
+      scheduleSave();
+    },
+    [scheduleSave],
+  );
+
+  /** 撤销上一步：一段编辑会话或一次结构操作。返回是否真的撤销了什么 */
   const undo = useCallback((): boolean => {
     const current = nbRef.current;
-    const prev = history.current.past.pop();
-    if (!current || !prev) return false;
-    history.current.future.push(current);
-    const restored = mergeSnapshot(prev, current);
-    restored.updated = new Date().toISOString();
-    nbRef.current = restored;
-    setNb(restored);
-    setHistoryRev((r) => r + 1);
-    scheduleSave();
-    debug.log('note', '撤销', { id: current.id, remaining: history.current.past.length });
+    if (!current) return false;
+    const prev = history.current.undo(current);
+    if (!prev) return false;
+    restore(prev, current);
+    debug.log('note', '撤销', { id: current.id, remaining: history.current.depth });
     return true;
-  }, [scheduleSave]);
+  }, [restore]);
 
   const redo = useCallback((): boolean => {
     const current = nbRef.current;
-    const next = history.current.future.pop();
-    if (!current || !next) return false;
-    history.current.past.push(current);
-    const restored = mergeSnapshot(next, current);
-    restored.updated = new Date().toISOString();
-    nbRef.current = restored;
-    setNb(restored);
-    setHistoryRev((r) => r + 1);
-    scheduleSave();
+    if (!current) return false;
+    const next = history.current.redo(current);
+    if (!next) return false;
+    restore(next, current);
     return true;
-  }, [scheduleSave]);
+  }, [restore]);
 
   /**
    * 把改动应用到指定的那篇笔记。
@@ -645,8 +665,9 @@ export function useNotebook(store: NotebookStore | null) {
     update,
     undo,
     redo,
-    canUndo: history.current.past.length > 0,
-    canRedo: history.current.future.length > 0,
+    sealHistory,
+    canUndo: history.current.canUndo,
+    canRedo: history.current.canRedo,
     /** 撤销栈变化的计数，让 canUndo/canRedo 的读者跟着重渲染 */
     historyRev,
     flush,

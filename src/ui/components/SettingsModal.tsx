@@ -3,7 +3,7 @@ import { LANGS, type LangId } from '@core/model';
 import { defaultVault, setVault } from '@core/config';
 import type { RuntimeStatus } from '@core/runtime/types';
 import type { StoreSetup } from '@core/store/index';
-import type { FontSizes, ThemeSelection } from '@core/theme';
+import type { Density, FontSizes, ThemeSelection } from '@core/theme';
 import { useRuntimes } from '../RuntimeContext';
 import { useTheme } from '../theme/ThemeProvider';
 import { useRuntimeCatalog } from '../useRuntimeCatalog';
@@ -111,6 +111,7 @@ export function SettingsModal({ setup, initialTab, onVaultChanged, onClose }: Pr
   const [vaultInput, setVaultInput] = useState(currentVaultValue);
   const [selection, setSelection] = useState<ThemeSelection>(theme.selection);
   const [fontSizes, setFontSizes] = useState<FontSizes>(theme.fontSizes);
+  const [density, setDensity] = useState<Density>(theme.density);
 
   const [vaultDefault, setVaultDefault] = useState('');
   const [busy, setBusy] = useState(false);
@@ -136,7 +137,8 @@ export function SettingsModal({ setup, initialTab, onVaultChanged, onClose }: Pr
   const vaultDirty = setup.store.kind === 'vault' && vaultInput.trim() !== currentVaultValue;
   const themeDirty =
     JSON.stringify(selection) !== JSON.stringify(theme.selection) ||
-    JSON.stringify(fontSizes) !== JSON.stringify(theme.fontSizes);
+    JSON.stringify(fontSizes) !== JSON.stringify(theme.fontSizes) ||
+    density !== theme.density;
   const dirty = pathsDirty || vaultDirty || themeDirty;
 
   const dirtyTabs = useMemo(
@@ -160,6 +162,7 @@ export function SettingsModal({ setup, initialTab, onVaultChanged, onClose }: Pr
       if (themeDirty) {
         theme.setSelection(selection);
         theme.setFontSizes(fontSizes);
+        theme.setDensity(density);
       }
       if (pathsDirty) {
         for (const l of LANGS) {
@@ -307,8 +310,10 @@ export function SettingsModal({ setup, initialTab, onVaultChanged, onClose }: Pr
               <ThemeSettings
                 selection={selection}
                 fontSizes={fontSizes}
+                density={density}
                 onSelection={setSelection}
                 onFontSizes={setFontSizes}
+                onDensity={setDensity}
               />
             )}
 

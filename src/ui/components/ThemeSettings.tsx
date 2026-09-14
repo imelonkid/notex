@@ -1,7 +1,9 @@
 import {
   DEFAULT_FONT_SIZES,
+  DENSITIES,
   FONT_SIZE_LIMITS,
   type Appearance,
+  type Density,
   type FontSizes,
   type Theme,
   type ThemeSelection,
@@ -33,16 +35,18 @@ interface Props {
   /** 草稿，由设置弹窗持有；点「保存」才写进 ThemeProvider */
   selection: ThemeSelection;
   fontSizes: FontSizes;
+  density: Density;
   onSelection(next: ThemeSelection): void;
   onFontSizes(next: FontSizes): void;
+  onDensity(next: Density): void;
 }
 
 /**
- * 设置里的「主题」与「字号」。
- * 主题只管颜色、字体、字重和标题比例；字号是用户偏好，换主题不会改变它。
+ * 设置里的「主题」「字号」与「密度」。
+ * 主题只管颜色、字体、字重和标题比例；字号和密度是用户偏好，换主题不会改变它们。
  * 这里只改草稿，不直接改生效值——改了没保存就关掉，什么都不该变。
  */
-export function ThemeSettings({ selection: sel, fontSizes, onSelection, onFontSizes }: Props) {
+export function ThemeSettings({ selection: sel, fontSizes, density, onSelection, onFontSizes, onDensity }: Props) {
   const t = useTheme();
   const byAppearance = (a: Appearance) => t.themes.filter((x) => x.appearance === a);
 
@@ -152,6 +156,20 @@ export function ThemeSettings({ selection: sel, fontSizes, onSelection, onFontSi
           </button>
         </div>
         <div className="nx-install-note">字号是你的偏好，换主题不会改变它；主题只决定标题比正文大多少。</div>
+      </div>
+
+      <div className="nx-field">
+        <div className="nx-field-label">密度</div>
+        <div className="nx-seg" style={{ marginBottom: 8 }}>
+          {DENSITIES.map((d) => (
+            <button key={d.id} data-active={density === d.id} onClick={() => onDensity(d.id)}>
+              {d.label}
+            </button>
+          ))}
+        </div>
+        <div className="nx-install-note">
+          行距、段距、代码块和 cell 之间的留白一起变。紧凑同屏能多看两成，宽松适合长文慢读。
+        </div>
       </div>
     </>
   );

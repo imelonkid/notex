@@ -344,7 +344,7 @@ button {
   grid-template-columns: var(--nx-gutter-width) minmax(0, 1fr);
   gap: 0 10px;
   align-items: start;
-  padding: 10px 8px 14px 0;
+  padding: var(--nx-cell-pad-top) 8px var(--nx-cell-pad-bottom) 0;
   border-radius: var(--nx-radius);
 }
 .nx-cell:hover {
@@ -473,7 +473,7 @@ button {
   display: flex;
   gap: 6px;
   align-items: center;
-  margin-bottom: 7px;
+  margin-bottom: 4px;
   flex-wrap: wrap;
 }
 .nx-save-state {
@@ -930,11 +930,15 @@ svg.nx-out-html {
 }
 .nx-md ul,
 .nx-md ol {
-  margin: var(--nx-md-paragraph-gap) 0;
+  margin: var(--nx-md-list-gap) 0;
   padding-left: var(--nx-md-list-indent);
 }
 .nx-md li {
   margin: var(--nx-md-list-item-gap) 0;
+}
+/* 列表项里的段落不再各自撑段距，否则嵌套列表会松成一团 */
+.nx-md li > p {
+  margin: 0;
 }
 .nx-md code {
   font-family: var(--nx-md-code-font);
@@ -959,10 +963,17 @@ svg.nx-out-html {
   padding: 0;
 }
 .nx-md blockquote {
-  margin: 0.7em 0;
-  padding: 2px 16px;
+  margin: var(--nx-md-quote-gap) 0;
+  padding: 0 14px;
   border-left: var(--nx-md-quote-border-width) solid var(--nx-md-quote-border);
   color: var(--nx-md-quote-color);
+}
+/* 引用块自己有外边距，里面第一段和最后一段的段距要去掉，否则上下各空一层 */
+.nx-md blockquote > :first-child {
+  margin-top: 0;
+}
+.nx-md blockquote > :last-child {
+  margin-bottom: 0;
 }
 .nx-md img {
   max-width: 100%;

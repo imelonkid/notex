@@ -194,6 +194,14 @@ export class DevServerHost implements HostBridge {
     return r.modified;
   }
 
+  async writeBinary(path: string, base64: string): Promise<void> {
+    await postJson('/write-binary', { path, base64 });
+  }
+
+  fileUrl(path: string): string {
+    return `${BASE}/file?path=${encodeURIComponent(path)}`;
+  }
+
   async fileSize(path: string): Promise<number | null> {
     const r = await getJson<{ modified: string | null; size: number }>(`/stat?path=${encodeURIComponent(path)}`);
     return r.modified === null ? null : r.size;
@@ -202,6 +210,11 @@ export class DevServerHost implements HostBridge {
   async sha256(path: string): Promise<string> {
     const r = await getJson<{ sha256: string }>(`/sha256?path=${encodeURIComponent(path)}`);
     return r.sha256;
+  }
+
+  async systemProxy(): Promise<string | null> {
+    const r = await getJson<{ proxy: string | null }>('/proxy');
+    return r.proxy;
   }
 
   async ensureDir(path: string): Promise<void> {

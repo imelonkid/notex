@@ -227,6 +227,19 @@ fn write_text(path: String, content: String) -> Result<(), String> {
     std::fs::write(&path, content).map_err(|e| format!("{path}: {e}"))
 }
 
+/// 二进制文件用 base64 传过来：粘贴的截图、网页里内嵌的 data: 图片
+#[tauri::command]
+fn write_base64(path: String, base64: String) -> Result<(), String> {
+    use base64::Engine;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(base64.as_bytes())
+        .map_err(|e| format!("base64 解码失败：{e}"))?;
+    if let Some(parent) = PathBuf::from(&path).parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(&path, bytes).map_err(|e| format!("{path}: {e}"))
+}
+
 #[tauri::command]
 fn file_exists(path: String) -> bool {
     PathBuf::from(path).exists()
@@ -245,6 +258,52 @@ fn file_size(path: String) -> Option<u64> {
 #[tauri::command]
 fn cpu_arch() -> &'static str {
     std::env::consts::ARCH
+}
+
+/// 当前生效的代理：先看环境变量，macOS 再问系统设置。
+/// 从 Finder 启动的应用没有 HTTPS_PROXY，而 curl 只认环境变量，
+/// 不做这一步，用户开着代理也会看到 SSL_ERROR_SYSCALL。
+#[tauri::command]
+async fn system_proxy() -> Option<String> {
+    for key in ["HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy", "HTTP_PROXY", "http_proxy"] {
+        if let Ok(v) = std::env::var(key) {
+            if !v.trim().is_empty() {
+                return Some(v);
+            }
+        }
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let out = tauri::async_runtime::spawn_blocking(|| Command::new("scutil").arg("--proxy").output())
+            .await
+            .ok()?
+            .ok()?;
+        let text = String::from_utf8_lossy(&out.stdout).to_string();
+        let get = |key: &str| -> Option<String> {
+            text.lines().find_map(|line| {
+                let line = line.trim();
+                let rest = line.strip_prefix(key)?.trim_start();
+                let value = rest.strip_prefix(':')?.trim();
+                Some(value.to_string())
+            })
+        };
+        if get("HTTPSEnable").as_deref() == Some("1") {
+            if let (Some(h), Some(p)) = (get("HTTPSProxy"), get("HTTPSPort")) {
+                return Some(format!("http://{h}:{p}"));
+            }
+        }
+        if get("HTTPEnable").as_deref() == Some("1") {
+            if let (Some(h), Some(p)) = (get("HTTPProxy"), get("HTTPPort")) {
+                return Some(format!("http://{h}:{p}"));
+            }
+        }
+        if get("SOCKSEnable").as_deref() == Some("1") {
+            if let (Some(h), Some(p)) = (get("SOCKSProxy"), get("SOCKSPort")) {
+                return Some(format!("socks5h://{h}:{p}"));
+            }
+        }
+    }
+    None
 }
 
 /// 下载的运行时包要校验后才能解压；一百多 MB 的文件放到线程池里算
@@ -544,10 +603,12 @@ pub fn run() {
             home_dir,
             read_text,
             write_text,
+            write_base64,
             file_exists,
             stat_file,
             file_size,
             cpu_arch,
+            system_proxy,
             sha256_file,
             list_dir,
             ensure_dir,

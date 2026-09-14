@@ -35,16 +35,26 @@
   /* Markdown：排版间距归框架，颜色、字体、字重、标题比例来自主题 */
   --nx-md-font: var(--nx-font-body);
   --nx-md-font-size: var(--nx-font-size-prose);
-  --nx-md-line-height: 1.68;
+  /*
+   * 行距、段距、cell 外边距这些密度变量由用户设置里的「密度」决定，
+   * 见 core/theme.ts 的 densityVars；这里写的是「标准」档，只作首帧兜底。
+   */
+  --nx-md-line-height: 1.6;
   /* 开了 breaks，单个换行是 <br>；段间距要明显大于行距，否则分不出段落 */
-  --nx-md-paragraph-gap: 0.9em;
+  --nx-md-paragraph-gap: 0.75em;
+  --nx-md-list-gap: 0.6em;
+  --nx-md-list-item-gap: 0.15em;
   --nx-md-heading-line-height: 1.35;
-  --nx-md-heading-gap-top: 1.4em;
-  --nx-md-heading-gap-bottom: 0.55em;
+  --nx-md-heading-gap-top: 1.2em;
+  --nx-md-heading-gap-bottom: 0.4em;
+  --nx-md-quote-gap: 0.6em;
+  --nx-editor-line-height: 1.5;
+  --nx-editor-pad-y: 10px;
+  --nx-cell-pad-top: 8px;
+  --nx-cell-pad-bottom: 10px;
   --nx-md-code-font: var(--nx-font-mono);
   --nx-md-code-radius: 3px;
   --nx-md-quote-border-width: 2px;
   --nx-md-list-indent: 1.4em;
-  --nx-md-list-item-gap: 0.25em;
   --nx-md-table-cell-padding: 6px 12px;
 }

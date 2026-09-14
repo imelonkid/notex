@@ -10,7 +10,9 @@ import {
   DEFAULT_FONT_SIZES,
   FIELDS,
   clampFontSizes,
+  densityVars,
   findField,
+  normalizeDensity,
   normalizeSelection,
   parseTheme,
   resolveThemeVars,
@@ -176,6 +178,34 @@ test('字号夹到允许范围并对齐步长，坏值回到默认', () => {
   assert.deepEqual(clampFontSizes({ ui: 99, prose: 'abc', code: 12.4 }), { ui: 16, prose: DEFAULT_FONT_SIZES.prose, code: 12 });
   assert.deepEqual(clampFontSizes({ ui: 13.3 }), { ui: 13.5, prose: 15, code: 13 });
   assert.deepEqual(clampFontSizes(null), DEFAULT_FONT_SIZES);
+});
+
+test('密度：三档各给一整组变量，紧凑的比宽松的小，坏值回到标准', () => {
+  assert.equal(normalizeDensity('compact'), 'compact');
+  assert.equal(normalizeDensity('bogus'), 'normal');
+  assert.equal(normalizeDensity(null), 'normal');
+  const compact = densityVars('compact');
+  const relaxed = densityVars('relaxed');
+  assert.deepEqual(Object.keys(compact), Object.keys(relaxed));
+  assert.ok(parseFloat(compact['md-line-height']) < parseFloat(relaxed['md-line-height']));
+  assert.ok(parseFloat(compact['editor-line-height']) < parseFloat(relaxed['editor-line-height']));
+  // 变量会写进 <style>，值必须是安全的
+  assert.doesNotThrow(() => toCssText(densityVars('normal')));
+});
+
+test('密度变量在样式或编辑器里都用到了', () => {
+  const texts = [];
+  const walk = (dir) => {
+    for (const name of readdirSync(dir)) {
+      const p = path.join(dir, name);
+      if (statSync(p).isDirectory()) walk(p);
+      else if (/\.(css|tsx?)$/.test(name)) texts.push(readFileSync(p, 'utf8'));
+    }
+  };
+  walk(path.join(ROOT, 'src'));
+  const all = texts.join('\n');
+  const unused = Object.keys(densityVars('normal')).filter((k) => !all.includes(`var(--nx-${k})`));
+  assert.deepEqual(unused, []);
 });
 
 test('选主题：固定一个，或跟随系统', () => {

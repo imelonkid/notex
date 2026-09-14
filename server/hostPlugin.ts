@@ -125,6 +125,45 @@ async function trashPath(target: string): Promise<void> {
   await rename(abs, path.join(dir, `${stamp} ${path.basename(abs)}`));
 }
 
+/**
+ * 当前生效的代理：先看环境变量，macOS 再问系统设置（scutil --proxy）。
+ * 给应用起的 curl 用，它不像网页的 fetch 那样自动走系统代理。
+ */
+async function systemProxy(): Promise<string | null> {
+  for (const k of ['HTTPS_PROXY', 'https_proxy', 'ALL_PROXY', 'all_proxy', 'HTTP_PROXY', 'http_proxy']) {
+    const v = process.env[k];
+    if (v) return v;
+  }
+  if (process.platform !== 'darwin') return null;
+  try {
+    const { stdout } = await execFileAsync('scutil', ['--proxy']);
+    const get = (key: string) => {
+      const m = new RegExp(`^\\s*${key}\\s*:\\s*(.+)$`, 'm').exec(stdout);
+      return m ? m[1].trim() : '';
+    };
+    if (get('HTTPSEnable') === '1' && get('HTTPSProxy')) return `http://${get('HTTPSProxy')}:${get('HTTPSPort')}`;
+    if (get('HTTPEnable') === '1' && get('HTTPProxy')) return `http://${get('HTTPProxy')}:${get('HTTPPort')}`;
+    if (get('SOCKSEnable') === '1' && get('SOCKSProxy')) return `socks5h://${get('SOCKSProxy')}:${get('SOCKSPort')}`;
+  } catch {
+    /* 没有 scutil 或没配代理 */
+  }
+  return null;
+}
+
+const MIME_BY_EXT: Record<string, string> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  svg: 'image/svg+xml',
+  bmp: 'image/bmp',
+  avif: 'image/avif',
+  pdf: 'application/pdf',
+  txt: 'text/plain; charset=utf-8',
+  md: 'text/markdown; charset=utf-8',
+};
+
 function isJsonPost(req: import('node:http').IncomingMessage): boolean {
   return req.method === 'POST' && /^application\/json\b/i.test(req.headers['content-type'] ?? '');
 }
@@ -242,6 +281,34 @@ export function hostPlugin(): Plugin {
         try {
           if (url.pathname === '/info') {
             return json(res, 200, { platform: process.platform, arch: process.arch, kernels: KERNELS, home: os.homedir() });
+          }
+          if (url.pathname === '/proxy') {
+            return json(res, 200, { proxy: await systemProxy() });
+          }
+          if (url.pathname === '/file') {
+            // 正文里相对路径的图片由这里提供。只接受本机页面的请求（上面已校验），
+            // 和 /read 一样不限定目录：开发服务器本来就等价于本机用户的权限
+            const p = url.searchParams.get('path') ?? '';
+            try {
+              const st = await stat(p);
+              if (!st.isFile()) return json(res, 404, { error: '不是文件' });
+              res.writeHead(200, {
+                'content-type': MIME_BY_EXT[path.extname(p).slice(1).toLowerCase()] ?? 'application/octet-stream',
+                'content-length': st.size,
+                'cache-control': 'no-cache',
+              });
+              createReadStream(p).pipe(res);
+              return;
+            } catch {
+              return json(res, 404, { error: '文件不存在' });
+            }
+          }
+          if (url.pathname === '/write-binary' && req.method === 'POST') {
+            const body = await readBody(req);
+            if (typeof body.path !== 'string' || typeof body.base64 !== 'string') throw new Error('参数格式不正确');
+            await mkdir(path.dirname(body.path), { recursive: true });
+            await writeFile(body.path, Buffer.from(body.base64, 'base64'));
+            return json(res, 200, { ok: true });
           }
           if (url.pathname === '/sha256') {
             const p = url.searchParams.get('path') ?? '';

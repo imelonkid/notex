@@ -80,10 +80,22 @@ export interface HostBridge {
   statFile(path: string): Promise<string | null>;
   /** 文件字节数；不存在时返回 null。下载进度靠它 */
   fileSize(path: string): Promise<number | null>;
+  /** 写二进制文件，内容用 base64 传。粘贴的截图、内嵌的 data: 图片走这里 */
+  writeBinary(path: string, base64: string): Promise<void>;
+  /**
+   * 本机文件在网页里能加载的地址，给正文里的相对路径图片用。
+   * 桌面壳是 asset 协议，开发服务器是一个本机专用的文件接口；做不到的宿主原样返回。
+   */
+  fileUrl(path: string): string;
   /** 文件的 sha256，十六进制小写。校验下载的运行时包 */
   sha256(path: string): Promise<string>;
   /** 打开系统的文件选择器；做不到的宿主返回 null */
   pickFile?(): Promise<string | null>;
+  /**
+   * 当前生效的代理地址（形如 http://127.0.0.1:7897 或 socks5h://…），没有则 null。
+   * 先看环境变量，再问系统设置。给 curl 用：它不认系统代理。
+   */
+  systemProxy?(): Promise<string | null>;
   ensureDir(path: string): Promise<void>;
   removeFile(path: string): Promise<void>;
   /** 递归删除目录 */

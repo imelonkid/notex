@@ -383,6 +383,71 @@ export function fontSizeVars(sizes: FontSizes): Record<string, string> {
   };
 }
 
+/* ---------- 用户设置：密度也不属于主题 ---------- */
+
+/**
+ * 行距、段距这些间距是阅读偏好，和字号一样归用户，主题碰不到。
+ * 三档而不是滑块：可选项少，默认值有意义，用户不必调来调去。
+ */
+export type Density = 'compact' | 'normal' | 'relaxed';
+
+export const DEFAULT_DENSITY: Density = 'normal';
+export const DENSITIES: Array<{ id: Density; label: string; hint: string }> = [
+  { id: 'compact', label: '紧凑', hint: '同屏多看两成' },
+  { id: 'normal', label: '标准', hint: '' },
+  { id: 'relaxed', label: '宽松', hint: '长文更松弛' },
+];
+
+export function normalizeDensity(input: unknown): Density {
+  return input === 'compact' || input === 'relaxed' ? input : DEFAULT_DENSITY;
+}
+
+/** 每档对应的一组内部变量；正文、列表、标题、代码编辑器、cell 外边距一起动 */
+export function densityVars(density: Density): Record<string, string> {
+  const table: Record<Density, Record<string, string>> = {
+    compact: {
+      'md-line-height': '1.5',
+      'md-paragraph-gap': '0.6em',
+      'md-list-gap': '0.5em',
+      'md-list-item-gap': '0.1em',
+      'md-heading-gap-top': '1em',
+      'md-heading-gap-bottom': '0.35em',
+      'md-quote-gap': '0.5em',
+      'editor-line-height': '1.4',
+      'editor-pad-y': '8px',
+      'cell-pad-top': '6px',
+      'cell-pad-bottom': '8px',
+    },
+    normal: {
+      'md-line-height': '1.6',
+      'md-paragraph-gap': '0.75em',
+      'md-list-gap': '0.6em',
+      'md-list-item-gap': '0.15em',
+      'md-heading-gap-top': '1.2em',
+      'md-heading-gap-bottom': '0.4em',
+      'md-quote-gap': '0.6em',
+      'editor-line-height': '1.5',
+      'editor-pad-y': '10px',
+      'cell-pad-top': '8px',
+      'cell-pad-bottom': '10px',
+    },
+    relaxed: {
+      'md-line-height': '1.75',
+      'md-paragraph-gap': '0.95em',
+      'md-list-gap': '0.8em',
+      'md-list-item-gap': '0.25em',
+      'md-heading-gap-top': '1.4em',
+      'md-heading-gap-bottom': '0.55em',
+      'md-quote-gap': '0.75em',
+      'editor-line-height': '1.6',
+      'editor-pad-y': '13px',
+      'cell-pad-top': '10px',
+      'cell-pad-bottom': '14px',
+    },
+  };
+  return table[density];
+}
+
 /* ---------- 选主题：固定一个，或跟随系统 ---------- */
 
 export type ThemeSelection = { mode: 'fixed'; theme: string } | { mode: 'system'; light: string; dark: string };

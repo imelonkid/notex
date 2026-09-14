@@ -31,6 +31,12 @@ export class BrowserHost implements HostBridge {
   async fileSize(): Promise<number | null> {
     return null;
   }
+  async writeBinary(): Promise<void> {
+    throw new HostCapabilityError('写入本地文件');
+  }
+  fileUrl(path: string): string {
+    return path;
+  }
   async sha256(): Promise<string> {
     throw new HostCapabilityError('计算文件哈希');
   }

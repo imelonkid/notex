@@ -6,6 +6,7 @@ import { exportIpynb, exportMarkdown, importNotebook } from '@core/files';
 import { parseDeps } from '@core/deps';
 import { nextLinkTarget, resolveNoteLink, rewriteNoteLinks } from '@core/links';
 import { SearchPalette } from './components/SearchPalette';
+import { useRichPaste } from './useRichPaste';
 import { RuntimeStrip, STATUS_WORD } from './components/RuntimeStrip';
 import { FolderIcon, GearIcon } from './components/icons';
 import { MAX_DIR_DEPTH, baseOf, depthOf, dirOf, joinId } from '@core/store/paths';
@@ -107,6 +108,14 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
     null,
   );
   const setLinkNotice = useCallback((text: string) => setNotice({ text }), []);
+
+  /** 富文本粘贴与正文里相对路径图片的解析，都以当前笔记所在目录为基准 */
+  const richPaste = useRichPaste({
+    host,
+    vaultPath: setup.store.kind === 'vault' ? setup.vaultPath : null,
+    noteId: book.activeId,
+    notify: setLinkNotice,
+  });
   /** 跳转到目标笔记后要滚到的小节，等目标渲染完再用 */
   const pendingHash = useRef<string | null>(null);
   const refsRef = useRef(book.refs);
@@ -455,7 +464,21 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
     });
   };
 
-  /** ⌘Z / ⇧⌘Z 作用于结构操作；编辑器里的键由编辑器自己处理 */
+  // 切到别的 cell 或退出编辑，文字编辑的会话就封口：再改是另一条撤销记录
+  const sealHistory = book.sealHistory;
+  useEffect(() => {
+    sealHistory();
+  }, [activeCellId, editingId, sealHistory]);
+  // 同一个 cell 里点开别处再回来接着写，也算两段：编辑器失焦就封口
+  useEffect(() => {
+    const onFocusOut = (e: FocusEvent) => {
+      if (inEditor(e.target)) sealHistory();
+    };
+    window.addEventListener('focusout', onFocusOut);
+    return () => window.removeEventListener('focusout', onFocusOut);
+  }, [sealHistory]);
+
+  /** ⌘Z / ⇧⌘Z：编辑器外撤销整段编辑会话或一次结构操作；编辑器里的键由编辑器自己处理 */
   const undoStructure = (redo: boolean) => {
     const done = redo ? book.redo() : book.undo();
     setNotice({ text: done ? (redo ? '已重做' : '已撤销') : redo ? '没有可重做的操作' : '没有可撤销的操作' });
@@ -526,8 +549,9 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
         removeCell(active);
       } else if (key === 'z') {
         // 编辑器里的 ⌘Z 撤销的是文字，那是编辑器自己的栈
-        if (inEditor(e.target)) return;
+        if (inEditor(e.target)) return debug.log('history', '⌘Z 在编辑器内，交给编辑器');
         e.preventDefault();
+        debug.log('history', e.shiftKey ? '⇧⌘Z 重做' : '⌘Z 撤销', { active: activeCellIdRef.current });
         undoStructure(e.shiftKey);
       } else if (key === '/') {
         // CodeMirror 里 ⌘/ 是注释切换，别再抢着弹面板；
@@ -1213,7 +1237,7 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
                   onActivate={() => setActiveCellId(cell.id)}
                   onMenu={(x, y, align) => openCellMenu(cell.id, x, y, align)}
                   dropActive={!!dragId && dropId === cell.id}
-                  onSource={(v) => book.update(ops.setSource(cell.id, v))}
+                  onSource={(v) => book.update(ops.setSource(cell.id, v), { group: cell.id })}
                   onLang={(l) => book.update(ops.setLang(cell.id, l), { record: true })}
                   onRun={() => void runCell(cell.id)}
                   onInterrupt={() => {
@@ -1245,6 +1269,8 @@ export function App({ setup, onVaultChanged }: { setup: StoreSetup; onVaultChang
                     });
                   }}
                   onOpenSettings={() => setSettingsOpen(true, 'runtime')}
+                  onRichPaste={richPaste.importClipboard}
+                  resolveImage={richPaste.resolveImage}
                 />
                 </CellBoundary>
                 </div>

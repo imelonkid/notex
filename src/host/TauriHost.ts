@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { open as openInSystem } from '@tauri-apps/plugin-shell';
@@ -107,12 +107,24 @@ export class TauriHost implements HostBridge {
     return this.cpu;
   }
 
+  async writeBinary(path: string, base64: string): Promise<void> {
+    await invoke('write_base64', { path, base64 });
+  }
+
+  fileUrl(path: string): string {
+    return convertFileSrc(path);
+  }
+
   async fileSize(path: string): Promise<number | null> {
     return (await invoke<number | null>('file_size', { path })) ?? null;
   }
 
   async sha256(path: string): Promise<string> {
     return await invoke<string>('sha256_file', { path });
+  }
+
+  async systemProxy(): Promise<string | null> {
+    return (await invoke<string | null>('system_proxy')) ?? null;
   }
 
   async pickFile(): Promise<string | null> {

@@ -52,6 +52,13 @@ interface Props {
   onDrop(): void;
   onRetryDetect(): void;
   onOpenSettings(): void;
+  /**
+   * 富文本粘贴：交给应用把 HTML 转成 Markdown、把图片落地。
+   * 返回要插入的文本；返回 null 表示按纯文本走
+   */
+  onRichPaste?(payload: { html?: string; text?: string; files: File[] }): Promise<string | null>;
+  /** 正文里相对路径的图片换成能加载的地址 */
+  resolveImage?(src: string): string;
 }
 
 /** 悬停提示：把括号里那个符号说清楚，用户不必猜 */
@@ -62,13 +69,31 @@ const RUN_TITLE: Record<string, string> = {
   aborted: '本次会话运行被中断 — 点击重新运行（⇧↩）',
 };
 
-function renderMarkdown(src: string): string {
+interface MdSnap {
+  value: string;
+  caret: number;
+}
+/** 连续输入停顿超过这个时间就算新的一组撤销 */
+const MD_UNDO_GROUP_MS = 600;
+const MD_UNDO_MAX = 200;
+
+function renderMarkdown(src: string, resolveImage?: (src: string) => string): string {
   if (!src.trim()) return '<p class="nx-md-empty">（空文本 — 双击编辑）</p>';
   try {
     // [[笔记名]] 先展开成普通链接，两种写法后续走同一条拦截逻辑；
     // 渲染结果必须净化后才能进 DOM，正文内容不一定是自己写的
     const html = marked.parse(expandWikiLinks(src), { breaks: true, gfm: true, async: false }) as string;
-    return sanitizeMarkdown(html);
+    const safe = sanitizeMarkdown(html);
+    if (!resolveImage) return safe;
+    // 相对路径的图片（.assets/x.png）换成宿主能加载的地址。放在净化之后：
+    // asset:// 这类协议不在净化白名单里，先换会被剥掉
+    const tpl = document.createElement('template');
+    tpl.innerHTML = safe;
+    tpl.content.querySelectorAll('img[src]').forEach((img) => {
+      const resolved = resolveImage(img.getAttribute('src') ?? '');
+      if (resolved) img.setAttribute('src', resolved);
+    });
+    return tpl.innerHTML;
   } catch {
     return `<p>${src.replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' })[c] ?? c)}</p>`;
   }
@@ -202,12 +227,102 @@ export function Cell(props: Props) {
 
   // 编辑态只显示编辑框，预览态才渲染，因此始终用已提交的 source
   const html = useMemo(
-    () => renderMarkdown(cell.type === 'md' ? cell.source : ''),
-    [cell.type, cell.source],
+    () => renderMarkdown(cell.type === 'md' ? cell.source : '', props.resolveImage),
+    [cell.type, cell.source, props.resolveImage],
   );
+
+  /** 富文本或图片粘贴：转成 Markdown 插到光标处；纯文本仍由浏览器处理 */
+  const onMdPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    if (!props.onRichPaste) return;
+    const html = e.clipboardData.getData('text/html');
+    const text = e.clipboardData.getData('text/plain');
+    const files = [...e.clipboardData.files].filter((f) => f.type.startsWith('image/'));
+    if (!html && !files.length) return;
+    e.preventDefault();
+    const el = e.currentTarget;
+    const start = el.selectionStart;
+    const end = el.selectionEnd;
+    const before = mdDraft.slice(0, start);
+    const after = mdDraft.slice(end);
+    void props.onRichPaste({ html, text, files }).then((md) => {
+      const insert = md ?? text;
+      if (!insert) return;
+      // 插入的块和前后文之间留空行，粘进段落中间也不会黏成一句
+      const lead = md && before && !before.endsWith('\n\n') ? (before.endsWith('\n') ? '\n' : '\n\n') : '';
+      const tail = md && after && !after.startsWith('\n\n') ? (after.startsWith('\n') ? '\n' : '\n\n') : '';
+      const chunk = `${lead}${insert}${tail}`;
+      // 粘贴单独占一组：之前的输入先封口，粘完再封口，⌘Z 正好退掉整次粘贴
+      pushMdHistory(mdDraft, start, true);
+      el.focus();
+      el.setSelectionRange(start, end);
+      // 走浏览器自己的插入，光标和滚动位置都由它管；插入会触发 onChange
+      const native = document.execCommand('insertText', false, chunk);
+      if (!native) {
+        const next = `${before}${chunk}${after}`;
+        setMdDraft(next);
+        props.onSource(next);
+        requestAnimationFrame(() => el.setSelectionRange(start + chunk.length, start + chunk.length));
+      }
+      mdHistory.current.lastAt = 0;
+    });
+  };
+
+  /**
+   * 文本编辑框自己的撤销栈。
+   * 不用浏览器原生的：WebKit 会把一次编辑里连续的输入和粘贴合成一组，
+   * ⌘Z 一下整段全没；Chromium 分组又不一样。自己记，行为在两边一致：
+   * 停顿超过 600ms 算新的一组，粘贴单独一组。
+   */
+  const mdHistory = useRef<{ past: MdSnap[]; future: MdSnap[]; lastAt: number }>({ past: [], future: [], lastAt: 0 });
+
+  const pushMdHistory = (value: string, caret: number, force = false) => {
+    const h = mdHistory.current;
+    const now = Date.now();
+    const top = h.past[h.past.length - 1];
+    if (top?.value === value) {
+      h.lastAt = now;
+      return;
+    }
+    if (!force && h.past.length && now - h.lastAt < MD_UNDO_GROUP_MS) {
+      h.lastAt = now;
+      return;
+    }
+    h.past.push({ value, caret });
+    if (h.past.length > MD_UNDO_MAX) h.past.shift();
+    h.future = [];
+    h.lastAt = now;
+  };
+
+  const applyMdSnapshot = (snap: MdSnap, el: HTMLTextAreaElement) => {
+    setMdDraft(snap.value);
+    props.onSource(snap.value);
+    requestAnimationFrame(() => {
+      el.focus();
+      el.setSelectionRange(snap.caret, snap.caret);
+    });
+  };
+
+  const undoMd = (el: HTMLTextAreaElement) => {
+    const h = mdHistory.current;
+    const snap = h.past.pop();
+    if (!snap) return;
+    h.future.push({ value: mdDraft, caret: el.selectionStart });
+    h.lastAt = 0;
+    applyMdSnapshot(snap, el);
+  };
+
+  const redoMd = (el: HTMLTextAreaElement) => {
+    const h = mdHistory.current;
+    const snap = h.future.pop();
+    if (!snap) return;
+    h.past.push({ value: mdDraft, caret: el.selectionStart });
+    h.lastAt = 0;
+    applyMdSnapshot(snap, el);
+  };
 
   const enterEdit = () => {
     setMdDraft(cell.source);
+    mdHistory.current = { past: [], future: [], lastAt: 0 };
     props.onEdit();
   };
 
@@ -354,7 +469,9 @@ export function Cell(props: Props) {
               rows={Math.max(3, mdDraft.split('\n').length + 1)}
               spellCheck={false}
               placeholder="用 Markdown 书写…  Esc 或点开别处回到预览"
+              onPaste={onMdPaste}
               onChange={(e) => {
+                pushMdHistory(mdDraft, Math.min(mdDraft.length, e.target.selectionStart));
                 setMdDraft(e.target.value);
                 props.onSource(e.target.value);
               }}
@@ -362,6 +479,11 @@ export function Cell(props: Props) {
                 if ((e.key === 'Enter' && e.shiftKey) || e.key === 'Escape') {
                   e.preventDefault();
                   commitAndPreview();
+                } else if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === 'z') {
+                  // 编辑框内的撤销走自己的栈，不交给浏览器
+                  e.preventDefault();
+                  if (e.shiftKey) redoMd(e.currentTarget);
+                  else undoMd(e.currentTarget);
                 }
               }}
               ref={(el) => {

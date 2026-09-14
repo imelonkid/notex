@@ -1,4 +1,5 @@
 import type { HostBridge, ResolvedDeps } from '../../host/HostBridge';
+import { curlProxyArgs, explainCurl } from '../net';
 
 /** 坐标必须严格校验后才能拼进命令行 */
 const COORD_RE = /^[\w.\-]+:[\w.\-]+:[\w.\-+]+(?::[\w.\-]+)?$/;
@@ -114,9 +115,11 @@ async function resolveDirect(
       continue;
     }
     const url = `https://repo1.maven.org/maven2/${g.replace(/\./g, '/')}/${a}/${v}/${name}`;
-    // 用 curl 落盘，避免把 jar 的二进制内容在前后端之间来回搬
-    const res = await host.exec('curl', ['-fsSL', '-o', dest, url]);
-    if (res.code !== 0) throw new Error(`下载失败 ${c}\n${url}\n${res.stderr}`);
+    // 用 curl 落盘，避免把 jar 的二进制内容在前后端之间来回搬；代理要显式传给它
+    const res = await host.exec('curl', ['-fsSL', ...(await curlProxyArgs(host, url)), '-o', dest, url], {
+      timeoutMs: 10 * 60 * 1000,
+    });
+    if (res.code !== 0) throw new Error(`下载失败 ${c}：${explainCurl(res.code, res.stderr)}\n${url}`);
     classpath.push(dest);
   }
   return { classpath, resolver: 'direct', warnings };

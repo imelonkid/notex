@@ -3,13 +3,16 @@ import { debug } from '@core/debug';
 import {
   DEFAULT_SELECTION,
   clampFontSizes,
+  densityVars,
   fontSizeVars,
+  normalizeDensity,
   normalizeSelection,
   parseTheme,
   resolveThemeVars,
   selectedThemeId,
   toCssText,
   type Appearance,
+  type Density,
   type FontSizes,
   type Theme,
   type ThemeSelection,
@@ -58,6 +61,7 @@ const BASES: Record<Appearance, Theme> = { light: requireBase('light'), dark: re
 
 const SELECTION_KEY = 'nx.theme.selection';
 const SIZES_KEY = 'nx.theme.fontSizes';
+const DENSITY_KEY = 'nx.theme.density';
 /** 选中的用户主题还没读到时，先用它上次的明暗顶上，免得深色主题启动时先闪一下白 */
 const LAST_APPEARANCE_KEY = 'nx.theme.lastAppearance';
 const STYLE_ID = 'nx-theme';
@@ -105,6 +109,10 @@ function readFontSizes(): FontSizes {
   }
 }
 
+function readDensity(): Density {
+  return normalizeDensity(storageGet(DENSITY_KEY));
+}
+
 function systemPrefersDark(): boolean {
   return window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false;
 }
@@ -116,7 +124,13 @@ interface Computed {
   fellBack: boolean;
 }
 
-function compute(themes: Theme[], selection: ThemeSelection, systemDark: boolean, sizes: FontSizes): Computed {
+function compute(
+  themes: Theme[],
+  selection: ThemeSelection,
+  systemDark: boolean,
+  sizes: FontSizes,
+  density: Density,
+): Computed {
   const wanted = selectedThemeId(selection, systemDark);
   const found = themes.find((t) => t.id === wanted);
   const appearance: Appearance =
@@ -129,7 +143,7 @@ function compute(themes: Theme[], selection: ThemeSelection, systemDark: boolean
         : 'light';
   const theme = found ?? BASES[appearance];
   return {
-    css: toCssText({ ...resolveThemeVars(theme, BASES), ...fontSizeVars(sizes) }),
+    css: toCssText({ ...resolveThemeVars(theme, BASES), ...fontSizeVars(sizes), ...densityVars(density) }),
     theme,
     fellBack: !found,
   };
@@ -148,7 +162,7 @@ function applyCss(computed: Computed) {
 
 /** 首帧之前同步上色：内置主题和本地偏好都能同步读到，不必等 React 挂载 */
 export function bootstrapTheme() {
-  applyCss(compute(BUILTIN_THEMES, readSelection(), systemPrefersDark(), readFontSizes()));
+  applyCss(compute(BUILTIN_THEMES, readSelection(), systemPrefersDark(), readFontSizes(), readDensity()));
 }
 
 interface ThemeContextValue {
@@ -158,6 +172,9 @@ interface ThemeContextValue {
   setSelection(selection: ThemeSelection): void;
   fontSizes: FontSizes;
   setFontSizes(sizes: FontSizes): void;
+  /** 行距、段距这些密度，用户偏好 */
+  density: Density;
+  setDensity(density: Density): void;
   /** 实际生效的主题 */
   active: Theme;
   issues: ThemeIssue[];
@@ -171,6 +188,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [issues, setIssues] = useState<ThemeIssue[]>([]);
   const [selection, setSelection] = useState<ThemeSelection>(readSelection);
   const [fontSizes, setFontSizesState] = useState<FontSizes>(readFontSizes);
+  const [density, setDensityState] = useState<Density>(readDensity);
   const [systemDark, setSystemDark] = useState(systemPrefersDark);
 
   useEffect(() => {
@@ -182,8 +200,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   const themes = useMemo(() => [...BUILTIN_THEMES, ...[...userThemes].sort(byPriorityThenName)], [userThemes]);
   const computed = useMemo(
-    () => compute(themes, selection, systemDark, fontSizes),
-    [themes, selection, systemDark, fontSizes],
+    () => compute(themes, selection, systemDark, fontSizes, density),
+    [themes, selection, systemDark, fontSizes, density],
   );
 
   useEffect(() => {
@@ -213,6 +231,12 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     storageSet(SIZES_KEY, JSON.stringify(clamped));
   }, []);
 
+  const setDensity = useCallback((next: Density) => {
+    const normalized = normalizeDensity(next);
+    setDensityState(normalized);
+    storageSet(DENSITY_KEY, normalized);
+  }, []);
+
   /** 用户主题每次整组替换：文件删了，列表里也要跟着消失 */
   const setUserThemes = useCallback((next: Theme[], nextIssues: ThemeIssue[]) => {
     setUserThemesState((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
@@ -226,11 +250,13 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       setSelection,
       fontSizes,
       setFontSizes,
+      density,
+      setDensity,
       active: computed.theme,
       issues,
       setUserThemes,
     }),
-    [themes, selection, fontSizes, setFontSizes, computed.theme, issues, setUserThemes],
+    [themes, selection, fontSizes, setFontSizes, density, setDensity, computed.theme, issues, setUserThemes],
   );
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;

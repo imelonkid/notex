@@ -11,7 +11,10 @@ import {
   indentUnit,
   syntaxHighlighting,
 } from '@codemirror/language';
-import { Compartment, EditorState, type Extension } from '@codemirror/state';
+import { Annotation, Compartment, EditorState, type Extension } from '@codemirror/state';
+
+/** 标记"这次改动是应用同步进来的，不是用户敲的"，更新监听据此不回调 */
+export const externalSync = Annotation.define<boolean>();
 import {
   EditorView,
   drawSelection,
@@ -47,9 +50,10 @@ export const xnbEditorTheme = EditorView.theme({
   },
   '.cm-content': {
     fontFamily: 'var(--nx-font-mono)',
-    padding: '13px 15px',
+    // 行距与上下内边距跟着用户设置里的「密度」走
+    padding: 'var(--nx-editor-pad-y) 14px',
     caretColor: 'var(--nx-editor-caret)',
-    lineHeight: '1.6',
+    lineHeight: 'var(--nx-editor-line-height)',
   },
   '.cm-line': { padding: '0' },
   '&.cm-focused': { outline: 'none' },
@@ -205,7 +209,9 @@ export function buildExtensions(opts: CellEditorOptions): Extension[] {
       indentWithTab,
     ]),
     EditorView.updateListener.of((update) => {
-      if (update.docChanged) opts.onChange(update.state.doc.toString());
+      // 外部同步进来的改动不回调：那是应用改的，不是用户敲的
+      const external = update.transactions.some((tr) => tr.annotation(externalSync));
+      if (update.docChanged && !external) opts.onChange(update.state.doc.toString());
       if (update.focusChanged && update.view.hasFocus) opts.onFocus?.();
     }),
     EditorState.allowMultipleSelections.of(true),

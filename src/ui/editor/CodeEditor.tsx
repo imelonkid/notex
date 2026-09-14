@@ -1,9 +1,9 @@
 import { useEffect, useRef } from 'react';
-import { EditorState } from '@codemirror/state';
+import { EditorState, Transaction } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import type { LangId } from '@core/model';
 import type { KernelSession } from '@core/runtime/KernelSession';
-import { buildExtensions, langCompartment, langExtension } from './setup';
+import { buildExtensions, externalSync, langCompartment, langExtension } from './setup';
 
 interface Props {
   value: string;
@@ -48,13 +48,18 @@ export function CodeEditor({ value, lang, onChange, onRun, onFocus, getSession }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 外部改了源码（撤销、加载文件）时同步进编辑器
+  // 外部改了源码（撤销、加载文件）时同步进编辑器。
+  // 标成外部同步：不回调 onChange（否则撤销会被当成一次新编辑，重做栈被清空），
+  // 也不进编辑器自己的历史（否则编辑器里 ⌘Z 会把刚撤销的又撤回来）
   useEffect(() => {
     const v = view.current;
     if (!v) return;
     const current = v.state.doc.toString();
     if (current === value) return;
-    v.dispatch({ changes: { from: 0, to: current.length, insert: value } });
+    v.dispatch({
+      changes: { from: 0, to: current.length, insert: value },
+      annotations: [externalSync.of(true), Transaction.addToHistory.of(false)],
+    });
   }, [value]);
 
   // 切换语言只 reconfigure 语法分区

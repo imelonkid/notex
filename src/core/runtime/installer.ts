@@ -5,6 +5,7 @@
  * 和解析 Maven 依赖是同一个思路：不把几十 MB 的二进制在前后端之间来回搬。
  */
 import type { HostBridge } from '../../host/HostBridge';
+import { curlProxyArgs, explainCurl } from '../net';
 import { type CatalogRuntime, type RuntimeBuild, installSegments, needsStrip } from './catalog';
 
 export interface InstallProgress {
@@ -80,7 +81,7 @@ export async function installRuntime(
     }
     return await unpackVerified(host, home, runtime, archive, onProgress);
   }
-  throw new Error(`下载失败：${lastError || '所有地址都不可用'}`);
+  throw new Error(`下载失败：${lastError || '所有地址都不可用'}\n可以先在浏览器里下好这个文件，再用「选择本地包」安装。`);
 }
 
 /** 用户自己下好的包：只校验不下载 */
@@ -117,12 +118,17 @@ async function download(
     }
   })();
   try {
-    const res = await host.exec('curl', ['-fL', '--retry', '2', '-C', '-', '-o', dest, url], {
+    // 系统代理要显式传给 curl，它不像网页的 fetch 那样自己会走
+    const proxy = await curlProxyArgs(host, url);
+    const res = await host.exec('curl', ['-fL', '--retry', '2', '-C', '-', ...proxy, '-o', dest, url], {
       timeoutMs: DOWNLOAD_TIMEOUT_MS,
     });
     stop = true;
     await poll;
-    if (res.code !== 0) return { ok: false, error: `${url}\n${res.stderr.trim().split('\n').slice(-1)[0] ?? ''}` };
+    if (res.code !== 0) {
+      const via = proxy.length ? `（经代理 ${proxy[1]}）` : '（未检测到代理）';
+      return { ok: false, error: `${explainCurl(res.code, res.stderr)}${via}\n${url}` };
+    }
     return { ok: true };
   } catch (e) {
     stop = true;
